@@ -128,8 +128,8 @@ Edit `.env.local`:
 ```env
 # Required
 VYNCICD_SECRET=<run: openssl rand -base64 32>
-VYNCICD_ADMIN_EMAIL=admin@example.com
-VYNCICD_ADMIN_PASSWORD=your-secure-password
+VYNCICD_ADMIN_EMAIL=admin@vyncicd.local
+VYNCICD_ADMIN_PASSWORD=changeme
 
 # Git providers (configure at least one)
 GITEA_URL=http://your-gitea:3300
@@ -415,19 +415,6 @@ src/
 
 ---
 
-## Part of the VynOps Suite
-
-| Product | Purpose | Repo |
-|---|---|---|
-| **VynOps** | Kubernetes operations platform | [vynops/VynOps](https://github.com/vynops/VynOps) |
-| **VynCICD** | CI/CD pipeline platform | [vynops/VynCICD](https://github.com/vynops/VynCICD) |
-| **VynAI** | Ollama fleet manager and AI gateway | [vynops/VynAI](https://github.com/vynops/VynAI) |
-| **VynCost** | Cloud cost visibility | [vynops/VynCost](https://github.com/vynops/VynCost) |
-| **VynDB** | Database operations | [vynops/VynDB](https://github.com/vynops/VynDB) |
-| **VynDC** | Data center management | [vynops/VynDC](https://github.com/vynops/VynDC) |
-
----
-
 ## Contributing
 
 Open an issue before submitting a large PR.
@@ -438,6 +425,19 @@ cd VynCICD && npm install
 git checkout -b feat/my-feature
 npm run dev
 ```
+
+---
+
+## Part of the VynOps Suite
+
+| Product | Purpose | Repo |
+|---|---|---|
+| **VynOps** | Kubernetes operations platform | [vynops/VynOps](https://github.com/vynops/VynOps) |
+| **VynCICD** | CI/CD pipeline platform | [vynops/VynCICD](https://github.com/vynops/VynCICD) |
+| **VynAI** | Ollama fleet manager and AI gateway | [vynops/VynAI](https://github.com/vynops/VynAI) |
+| **VynCost** | Cloud cost visibility | [vynops/VynCost](https://github.com/vynops/VynCost) |
+| **VynDB** | Database operations | [vynops/VynDB](https://github.com/vynops/VynDB) |
+| **VynDC** | Data center management | [vynops/VynDC](https://github.com/vynops/VynDC) |
 
 ---
 
