@@ -1,8 +1,12 @@
 'use client'
 
 import { usePathname } from 'next/navigation'
-import { RefreshCw, LogOut } from 'lucide-react'
+import { RefreshCw, LogOut, Bell } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
+import useSWR from 'swr'
+
+const fetcher = (url: string) => fetch(url).then(r => r.json())
 
 const TITLES: Record<string, string> = {
   '/overview':     'Overview',
@@ -44,6 +48,11 @@ export default function Header() {
   const title = TITLES[pathname] ?? 'VynCICD'
   const description = DESCRIPTIONS[pathname]
 
+  const { data: incidents } = useSWR('/api/incidents', fetcher, { refreshInterval: 30000 })
+  const openCount = Array.isArray(incidents)
+    ? incidents.filter((i: { status: string }) => i.status !== 'resolved').length
+    : 0
+
   async function handleLogout() {
     await fetch('/api/auth/logout', { method: 'POST' })
     router.push('/login')
@@ -63,10 +72,16 @@ export default function Header() {
         >
           <RefreshCw className="w-4 h-4" />
         </button>
-        <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-          <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-          <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">Live</span>
-        </div>
+        <Link
+          href="/incidents"
+          title={openCount > 0 ? `${openCount} open incident${openCount > 1 ? 's' : ''}` : 'Incidents'}
+          className="relative w-8 h-8 flex items-center justify-center rounded-lg text-slate-500 hover:text-white hover:bg-slate-800 transition-colors"
+        >
+          <Bell className="w-4 h-4" />
+          {openCount > 0 && (
+            <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-red-500 ring-1 ring-[#0d1117]" />
+          )}
+        </Link>
         <button
           onClick={handleLogout}
           title="Sign out"
@@ -74,7 +89,12 @@ export default function Header() {
         >
           <LogOut className="w-4 h-4" />
         </button>
+        <span className="hidden sm:flex items-center gap-1.5 text-xs font-bold text-slate-600 uppercase tracking-wider pl-1">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse inline-block" />
+          CICD Pipeline
+        </span>
       </div>
     </header>
   )
 }
+

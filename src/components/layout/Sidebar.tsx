@@ -18,19 +18,49 @@ interface NavItem {
   icon: React.ComponentType<{ className?: string }>
 }
 
-const NAV_ITEMS: NavItem[] = [
-  { href: '/overview',     label: 'Overview',            icon: LayoutDashboard },
-  { href: '/pipelines',    label: 'Pipelines',           icon: GitBranch },
-  { href: '/runs',         label: 'Runs',                icon: Play },
-  { href: '/repositories', label: 'Repositories',        icon: BookOpen },
-  { href: '/environments', label: 'Environments',        icon: Layers },
-  { href: '/deployments',  label: 'Deployments',         icon: Rocket },
-  { href: '/security',     label: 'Security',            icon: Shield },
-  { href: '/analytics',    label: 'Analytics & DORA',    icon: BarChart2 },
-  { href: '/incidents',    label: 'Incidents',           icon: AlertTriangle },
-  { href: '/oncall',       label: 'On-Call',             icon: Phone },
-  { href: '/routing',      label: 'Routing & Escalations', icon: GitMerge },
-  { href: '/copilot',      label: 'AI Copilot',          icon: Bot },
+interface NavGroup {
+  label: string
+  items: NavItem[]
+}
+
+const NAV_GROUPS: NavGroup[] = [
+  {
+    label: 'Pipeline',
+    items: [
+      { href: '/overview',     label: 'Overview',      icon: LayoutDashboard },
+      { href: '/pipelines',    label: 'Pipelines',     icon: GitBranch },
+      { href: '/runs',         label: 'Runs',          icon: Play },
+      { href: '/repositories', label: 'Repositories',  icon: BookOpen },
+    ],
+  },
+  {
+    label: 'Deploy',
+    items: [
+      { href: '/environments', label: 'Environments',  icon: Layers },
+      { href: '/deployments',  label: 'Deployments',   icon: Rocket },
+      { href: '/security',     label: 'Security',      icon: Shield },
+    ],
+  },
+  {
+    label: 'Observe',
+    items: [
+      { href: '/analytics',    label: 'Analytics & DORA', icon: BarChart2 },
+    ],
+  },
+  {
+    label: 'Operations',
+    items: [
+      { href: '/incidents',    label: 'Incidents',           icon: AlertTriangle },
+      { href: '/oncall',       label: 'On-Call',             icon: Phone },
+      { href: '/routing',      label: 'Routing & Escalations', icon: GitMerge },
+    ],
+  },
+  {
+    label: 'Tools',
+    items: [
+      { href: '/copilot',      label: 'AI Copilot',          icon: Bot },
+    ],
+  },
 ]
 
 const BOTTOM_ITEMS: NavItem[] = [
@@ -89,16 +119,25 @@ function SidebarContent({ pathname, onClose }: { pathname: string; onClose?: () 
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-0.5">
-        {NAV_ITEMS.map(item => (
-          <NavLink key={item.href} item={item} active={pathname === item.href} onClick={onClose} />
+      <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-4">
+        {NAV_GROUPS.map(group => (
+          <div key={group.label}>
+            <p className="px-3 mb-1 text-[10px] font-bold text-slate-600 uppercase tracking-widest">
+              {group.label}
+            </p>
+            <div className="space-y-0.5">
+              {group.items.map(item => (
+                <NavLink key={item.href} item={item} active={pathname === item.href} onClick={onClose} />
+              ))}
+            </div>
+          </div>
         ))}
 
-        <div className="border-t border-slate-800/60 my-3" />
-
-        {BOTTOM_ITEMS.map(item => (
-          <NavLink key={item.href} item={item} active={pathname === item.href} onClick={onClose} />
-        ))}
+        <div className="border-t border-slate-800/60 pt-2 space-y-0.5">
+          {BOTTOM_ITEMS.map(item => (
+            <NavLink key={item.href} item={item} active={pathname === item.href} onClick={onClose} />
+          ))}
+        </div>
       </nav>
 
       {/* User */}
@@ -156,3 +195,4 @@ export default function Sidebar() {
     </>
   )
 }
+
