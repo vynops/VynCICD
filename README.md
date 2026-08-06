@@ -446,11 +446,3 @@ npm run dev
 MIT — see [LICENSE](LICENSE).
 
 ---
-
-<div align="center">
-  <strong>VynCICD</strong> &nbsp;·&nbsp; Part of the <a href="https://github.com/vynops">VynOps Suite</a><br/>
-  <a href="https://github.com/vynops/VynCICD">GitHub</a> &nbsp;·&nbsp;
-  <a href="https://vynops.com/product/vyncicd">Website</a> &nbsp;·&nbsp;
-  <a href="https://discord.gg/vynops">Discord</a> &nbsp;·&nbsp;
-  <a href="https://twitter.com/vynops">Twitter / X</a>
-</div>
