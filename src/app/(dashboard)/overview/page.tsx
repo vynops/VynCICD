@@ -57,6 +57,12 @@ export default function OverviewPage() {
   const successRate = total > 0 ? Math.round((passed / total) * 100) : 0
 
   const openIncidents = incidents.filter(i => i.status !== 'resolved')
+  const targets = analytics?.targets ?? {
+    deploymentFrequency: 5,
+    leadTimeHours: 24,
+    mttrMinutes: 60,
+    changeFailureRate: 5,
+  }
 
   return (
     <div className="space-y-6 max-w-screen-2xl">
@@ -83,10 +89,10 @@ export default function OverviewPage() {
           </div>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             {[
-              { label: 'Deployment Frequency', value: `${analytics.deployFrequency}/wk`, status: analytics.deployFrequency >= 5 ? 'Elite' : analytics.deployFrequency >= 1 ? 'High' : 'Medium', color: analytics.deployFrequency >= 5 ? 'text-emerald-400' : analytics.deployFrequency >= 1 ? 'text-blue-400' : 'text-orange-400' },
-              { label: 'Lead Time for Changes', value: `${analytics.leadTimeHours}h`, status: analytics.leadTimeHours <= 24 ? 'Elite' : analytics.leadTimeHours <= 168 ? 'High' : 'Medium', color: analytics.leadTimeHours <= 24 ? 'text-emerald-400' : analytics.leadTimeHours <= 168 ? 'text-blue-400' : 'text-orange-400' },
-              { label: 'MTTR', value: analytics.mttrMinutes != null ? `${analytics.mttrMinutes}min` : '—', status: analytics.mttrMinutes == null ? 'No data' : analytics.mttrMinutes <= 60 ? 'Elite' : analytics.mttrMinutes <= 24*60 ? 'High' : 'Medium', color: analytics.mttrMinutes == null ? 'text-slate-500' : analytics.mttrMinutes <= 60 ? 'text-emerald-400' : 'text-orange-400' },
-              { label: 'Change Failure Rate', value: `${analytics.changeFailureRate}%`, status: analytics.changeFailureRate <= 5 ? 'Elite' : analytics.changeFailureRate <= 15 ? 'High' : 'Medium', color: analytics.changeFailureRate <= 5 ? 'text-emerald-400' : 'text-orange-400' },
+              { label: 'Deployment Frequency', value: `${analytics.deployFrequency}/wk`, status: analytics.deployFrequency >= targets.deploymentFrequency ? 'On target' : 'Below target', color: analytics.deployFrequency >= targets.deploymentFrequency ? 'text-emerald-400' : 'text-orange-400' },
+              { label: 'Lead Time for Changes', value: `${analytics.leadTimeHours}h`, status: analytics.leadTimeHours <= targets.leadTimeHours ? 'On target' : 'Above target', color: analytics.leadTimeHours <= targets.leadTimeHours ? 'text-emerald-400' : 'text-orange-400' },
+              { label: 'MTTR', value: analytics.mttrMinutes != null ? `${analytics.mttrMinutes}min` : '—', status: analytics.mttrMinutes == null ? 'No data' : analytics.mttrMinutes <= targets.mttrMinutes ? 'On target' : 'Above target', color: analytics.mttrMinutes == null ? 'text-slate-500' : analytics.mttrMinutes <= targets.mttrMinutes ? 'text-emerald-400' : 'text-orange-400' },
+              { label: 'Change Failure Rate', value: `${analytics.changeFailureRate}%`, status: analytics.changeFailureRate <= targets.changeFailureRate ? 'On target' : 'Above target', color: analytics.changeFailureRate <= targets.changeFailureRate ? 'text-emerald-400' : 'text-orange-400' },
             ].map(m => (
               <div key={m.label} className="space-y-1">
                 <div className="text-xs text-slate-500">{m.label}</div>

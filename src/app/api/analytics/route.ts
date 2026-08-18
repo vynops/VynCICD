@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireRole } from '@/lib/auth'
 import { loadRuns, loadDeployments } from '@/lib/data-store'
 import { loadIncidents } from '@/lib/oncall-store'
+import { getSettings } from '@/lib/settings-store'
 
 function dateKey(d: Date): string { return d.toISOString().slice(0, 10) }
 function daysAgo(n: number): Date { const d = new Date(); d.setDate(d.getDate() - n); return d }
@@ -30,6 +31,7 @@ export async function GET(req: NextRequest) {
   // DORA — MTTR (avg time to resolve: time from failed run to next success on same pipeline, mins)
   // DORA — MTTR: mean minutes from incident createdAt to resolvedAt (last 30 days)
   const incidents = loadIncidents()
+  const settings = getSettings()
   const resolvedIncidents = incidents.filter(i =>
     i.status === 'resolved' && new Date(i.createdAt).getTime() > thirtyDaysAgo
   )
@@ -91,6 +93,12 @@ export async function GET(req: NextRequest) {
     leadTimeHours,
     mttrMinutes,
     changeFailureRate,
+    targets: {
+      deploymentFrequency: settings.deploymentFrequencyTarget,
+      leadTimeHours: settings.leadTimeTargetHours,
+      mttrMinutes: settings.mttrTargetMinutes,
+      changeFailureRate: settings.changeFailureRateTarget,
+    },
     dailyRuns: Object.entries(dailyRuns).map(([date, v]) => ({ date, ...v })),
     buildTimeTrend: Object.entries(buildTimeTrend).map(([date, v]) => ({ date, avgMs: v.count > 0 ? Math.round(v.total / v.count) : 0 })),
     topFailingPipelines,

@@ -12,6 +12,12 @@ interface DoraData {
   leadTimeHours: number
   mttrMinutes: number | null
   changeFailureRate: number
+  targets: {
+    deploymentFrequency: number
+    leadTimeHours: number
+    mttrMinutes: number
+    changeFailureRate: number
+  }
   dailyRuns: { date: string; success: number; failed: number }[]
   buildTimeTrend: { date: string; avgMs: number }[]
   topFailingPipelines: { name: string; failRate: number; runs: number }[]
@@ -32,20 +38,20 @@ export default function AnalyticsPage() {
     <div className="flex items-center justify-center h-64 text-slate-600 text-sm">Loading analytics…</div>
   )
 
-  const freq  = PERF_LEVEL(d.deployFrequency, 7, 1)
-  const lead  = PERF_LEVEL(d.leadTimeHours, 24, 168)
-  const mttr  = d.mttrMinutes != null ? PERF_LEVEL(d.mttrMinutes, 60, 1440) : { label: 'No data', color: 'text-slate-500' }
-  const cfr   = PERF_LEVEL(d.changeFailureRate, 5, 15)
+  const freq  = d.deployFrequency >= d.targets.deploymentFrequency ? { label: 'On target', color: 'text-emerald-400' } : { label: 'Below target', color: 'text-orange-400' }
+  const lead  = PERF_LEVEL(d.leadTimeHours, d.targets.leadTimeHours, d.targets.leadTimeHours * 7)
+  const mttr  = d.mttrMinutes != null ? PERF_LEVEL(d.mttrMinutes, d.targets.mttrMinutes, d.targets.mttrMinutes * 24) : { label: 'No data', color: 'text-slate-500' }
+  const cfr   = PERF_LEVEL(d.changeFailureRate, d.targets.changeFailureRate, d.targets.changeFailureRate * 3)
 
   return (
     <div className="space-y-6 max-w-screen-2xl">
       {/* DORA metric cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
-          { label: 'Deployment Frequency', value: `${d.deployFrequency}/wk`, perf: freq, desc: 'Elite ≥ 7/wk · High ≥ 1/wk' },
-          { label: 'Lead Time for Changes', value: `${d.leadTimeHours}h`, perf: lead, desc: 'Elite ≤ 24h · High ≤ 168h' },
-          { label: 'MTTR', value: d.mttrMinutes != null ? `${d.mttrMinutes} min` : '—', perf: mttr, desc: 'Elite ≤ 60min · High ≤ 24h' },
-          { label: 'Change Failure Rate', value: `${d.changeFailureRate}%`, perf: cfr, desc: 'Elite ≤ 5% · High ≤ 15%' },
+          { label: 'Deployment Frequency', value: `${d.deployFrequency}/wk`, perf: freq, desc: `Target ≥ ${d.targets.deploymentFrequency}/wk` },
+          { label: 'Lead Time for Changes', value: `${d.leadTimeHours}h`, perf: lead, desc: `Target ≤ ${d.targets.leadTimeHours}h` },
+          { label: 'MTTR', value: d.mttrMinutes != null ? `${d.mttrMinutes} min` : '—', perf: mttr, desc: `Target ≤ ${d.targets.mttrMinutes}min` },
+          { label: 'Change Failure Rate', value: `${d.changeFailureRate}%`, perf: cfr, desc: `Target ≤ ${d.targets.changeFailureRate}%` },
         ].map(m => (
           <div key={m.label} className="bg-[#0d1117] border border-slate-800/60 rounded-xl p-4">
             <div className="text-xs text-slate-500 mb-2">{m.label}</div>

@@ -46,6 +46,8 @@ const HEADERS = {
 
 // Track which run IDs are currently being processed (prevent double-claiming)
 const inFlight = new Set()
+let cachedSettings = null
+let cachedSettingsAt = 0
 
 // ── API helpers ───────────────────────────────────────────────────────────────
 
@@ -70,6 +72,25 @@ async function reportStage(runId, stageName, update) {
 async function pushLogs(runId, stageName, lines) {
   if (!lines.length) return
   return apiFetch(`/api/runs/${runId}/logs`, { method: 'POST', body: JSON.stringify({ stage: stageName, lines }) })
+}
+
+async function getRuntimeSettings() {
+  if (cachedSettings && Date.now() - cachedSettingsAt < 30000) return cachedSettings
+  try {
+    cachedSettings = await apiFetch('/api/runner/settings')
+    cachedSettingsAt = Date.now()
+  } catch (err) {
+    console.error(`[runner] settings fetch error: ${err.message}`)
+  }
+  return cachedSettings ?? {
+    trivyEnabled: true,
+    secretScanEnabled: true,
+    sbomEnabled: true,
+    blockOnCriticalCves: true,
+    defaultRetryCount: 2,
+    defaultTimeoutMinutes: 30,
+    buildConcurrency: 4,
+  }
 }
 
 // ── CI env vars & template resolution ────────────────────────────────────────
@@ -112,7 +133,7 @@ function resolveTemplate(str, env) {
  * Run a shell command, stream stdout/stderr back as log lines.
  * Returns { exitCode, durationMs }.
  */
-function runCommand(cmd, args, opts, onLines) {
+function runCommand(cmd, args, opts, onLines, timeoutMs = MAX_STAGE_MS) {
   return new Promise((resolve) => {
     const start = Date.now()
     const child = spawn(cmd, args, { shell: false, ...opts })
@@ -128,8 +149,8 @@ function runCommand(cmd, args, opts, onLines) {
 
     const timer = setTimeout(() => {
       child.kill('SIGKILL')
-      onLines(['[runner] stage timed out after ' + MAX_STAGE_MS + 'ms'])
-    }, MAX_STAGE_MS)
+      onLines(['[runner] stage timed out after ' + timeoutMs + 'ms'])
+    }, timeoutMs)
 
     child.on('close', (code) => {
       clearTimeout(timer)
@@ -144,7 +165,7 @@ function runCommand(cmd, args, opts, onLines) {
   })
 }
 
-async function executeStage(run, stage, workDir) {
+async function executeStage(run, stage, workDir, settings) {
   const { name, type } = stage
   const runId = run.id
   const startedAt = new Date().toISOString()
@@ -169,15 +190,21 @@ async function executeStage(run, stage, workDir) {
 
   let exitCode = 0
   let durationMs = 0
+  let skipped = false
+  const timeoutMs = Math.max(1000, Number(stage.timeoutMinutes ?? settings.defaultTimeoutMinutes) * 60000)
 
   try {
     if (type === 'run' || type === 'test' || type === 'build') {
       const shellCmd = stage.run ?? `echo "no run command for ${name}"`
-      const result = await runCommand('bash', ['-c', shellCmd], { cwd: workDir, env }, onLines)
+      const result = await runCommand('bash', ['-c', shellCmd], { cwd: workDir, env }, onLines, timeoutMs)
       exitCode = result.exitCode
       durationMs = result.durationMs
 
     } else if (type === 'scan') {
+      if (!settings.trivyEnabled) {
+        onLines(['[trivy] scanning disabled in Settings'])
+        skipped = true
+      } else {
       // Resolve image template — defaults to the built image for this run
       const rawImage = stage.image ?? '${IMAGE}'
       const image = resolveTemplate(rawImage, env)
@@ -185,13 +212,43 @@ async function executeStage(run, stage, workDir) {
       const result = await runCommand(
         'docker',
         ['run', '--rm', '-v', '/var/run/docker.sock:/var/run/docker.sock',
-         'aquasec/trivy:latest', 'image', '--exit-code', '0',
+         'aquasec/trivy:latest', 'image', '--exit-code', settings.blockOnCriticalCves ? '1' : '0',
          '--severity', 'CRITICAL,HIGH', '--format', 'table', image],
         { cwd: workDir, env },
-        onLines
+        onLines,
+        timeoutMs
       )
       exitCode = result.exitCode
       durationMs = result.durationMs
+
+      if (exitCode === 0 && settings.secretScanEnabled) {
+        const secretResult = await runCommand(
+          'docker',
+          ['run', '--rm', '-v', `${workDir}:/workspace`, 'aquasec/trivy:latest', 'fs',
+           '--scanners', 'secret', '--exit-code', settings.blockOnCriticalCves ? '1' : '0', '/workspace'],
+          { cwd: workDir, env },
+          onLines,
+          timeoutMs
+        )
+        exitCode = secretResult.exitCode
+        durationMs += secretResult.durationMs
+      }
+
+      if (exitCode === 0 && settings.sbomEnabled) {
+        const sbomPath = path.join(workDir, `${name}-sbom.json`)
+        const sbomResult = await runCommand(
+          'docker',
+          ['run', '--rm', '-v', '/var/run/docker.sock:/var/run/docker.sock', '-v', `${workDir}:/workspace`,
+           'aquasec/trivy:latest', 'image', '--format', 'cyclonedx', '--output', `/workspace/${name}-sbom.json`, image],
+          { cwd: workDir, env },
+          onLines,
+          timeoutMs
+        )
+        exitCode = sbomResult.exitCode
+        durationMs += sbomResult.durationMs
+        if (existsSync(sbomPath)) onLines([`[trivy] SBOM generated: ${sbomPath}`])
+      }
+      }
 
     } else if (type === 'deploy') {
       const stageEnv = stage.environment ?? run.environment ?? 'dev'
@@ -211,7 +268,8 @@ async function executeStage(run, stage, workDir) {
           'kubectl',
           ['--kubeconfig', KUBECONFIG, '-n', namespace, 'apply', '-f', manifestPath],
           { cwd: workDir, env },
-          onLines
+          onLines,
+          timeoutMs
         )
         exitCode = result.exitCode
         durationMs = result.durationMs
@@ -239,7 +297,7 @@ async function executeStage(run, stage, workDir) {
   await flush()
 
   const finishedAt = new Date().toISOString()
-  const status = exitCode === 0 ? 'success' : (stage.allowFailure ? 'skipped' : 'failed')
+  const status = skipped ? 'skipped' : (exitCode === 0 ? 'success' : (stage.allowFailure ? 'skipped' : 'failed'))
 
   await reportStage(runId, name, {
     status,
@@ -282,7 +340,7 @@ async function prepareWorkdir(run) {
 
 // ── Run processor ─────────────────────────────────────────────────────────────
 
-async function processRun(run) {
+async function processRun(run, settings) {
   if (inFlight.has(run.id)) return
   inFlight.add(run.id)
 
@@ -297,7 +355,14 @@ async function processRun(run) {
     for (const stage of run.stages) {
       if (stage.status === 'success' || stage.status === 'skipped') continue
 
-      const result = await executeStage(run, stage, workDir)
+      const maxAttempts = Math.max(1, Number(stage.retryCount ?? settings.defaultRetryCount) + 1)
+      let result
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        result = await executeStage(run, stage, workDir, settings)
+        if (result.status !== 'failed' || attempt === maxAttempts) break
+        await reportStage(run.id, stage.name, { status: 'pending', retries: attempt })
+        console.log(`[runner] retrying stage=${stage.name} attempt=${attempt + 1}/${maxAttempts}`)
+      }
 
       // Stop pipeline on failure (unless allowFailure)
       if (result.status === 'failed') {
@@ -343,9 +408,11 @@ async function processRun(run) {
 async function poll() {
   try {
     const runs = await apiFetch(`/api/runs?status=pending&limit=5`)
-    for (const run of runs) {
+    const settings = await getRuntimeSettings()
+    const capacity = Math.max(0, Number(settings.buildConcurrency) - inFlight.size)
+    for (const run of runs.slice(0, capacity)) {
       // Fire and forget — each run processed concurrently
-      processRun(run).catch(err => console.error(`[runner] unhandled: ${err.message}`))
+      processRun(run, settings).catch(err => console.error(`[runner] unhandled: ${err.message}`))
     }
   } catch (err) {
     console.error(`[runner] poll error: ${err.message}`)

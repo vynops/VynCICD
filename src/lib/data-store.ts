@@ -54,6 +54,7 @@ export interface PipelineStage {
 }
 
 export interface Pipeline {
+  executionMode?: 'native' | 'jenkinsfile'
   id: string
   name: string
   repoId: string
@@ -69,6 +70,9 @@ export interface Pipeline {
   lastRunId?: string
   lastRunStatus?: PipelineRunStatus
   lastRunAt?: string
+  jenkinsJob?: string
+  jenkinsfilePath?: string
+  jenkinsParameters?: Record<string, string>
   _demo?: boolean
 }
 
@@ -113,6 +117,10 @@ export interface PipelineRun {
   durationMs?: number
   environment?: string
   error?: string
+  executionMode?: 'native' | 'jenkinsfile'
+  jenkinsQueueUrl?: string
+  jenkinsBuildNumber?: number
+  jenkinsBuildUrl?: string
   aiTriage?: string
   _demo?: boolean
 }

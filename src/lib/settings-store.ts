@@ -41,7 +41,12 @@ export interface AppSettings {
   notifyOnSlowBuild: boolean
   slowBuildThresholdMinutes: number
   // Alerting delivery
+  alertSlackEnabled: boolean
+  alertTeamEnabled: boolean
+  alertWebhookEnabled: boolean
   slackWebhookUrl: string
+  teamsWebhookUrl: string
+  customWebhookUrl: string
   alertEmailEnabled: boolean
   alertRecipients: string
   smtpHost: string
@@ -50,8 +55,15 @@ export interface AppSettings {
   smtpPassword: string
   smtpFrom: string
   // AI Copilot
+  aiProvider: 'groq' | 'openai' | 'anthropic' | 'google' | 'custom'
+  aiApiKey: string
+  aiBaseUrl: string
   groqApiKey: string
   aiModel: string
+  // Jenkins integration
+  jenkinsUrl: string
+  jenkinsUsername: string
+  jenkinsApiToken: string
   // DORA / analytics
   deploymentFrequencyTarget: number   // deploys/week
   leadTimeTargetHours: number
@@ -95,7 +107,12 @@ const DEFAULTS: AppSettings = {
   notifyOnSuccess: false,
   notifyOnSlowBuild: true,
   slowBuildThresholdMinutes: 20,
+  alertSlackEnabled: true,
+  alertTeamEnabled: false,
+  alertWebhookEnabled: false,
   slackWebhookUrl: process.env.SLACK_WEBHOOK_URL ?? '',
+  teamsWebhookUrl: process.env.TEAMS_WEBHOOK_URL ?? '',
+  customWebhookUrl: process.env.CUSTOM_WEBHOOK_URL ?? '',
   alertEmailEnabled: false,
   alertRecipients: '',
   smtpHost: process.env.SMTP_HOST ?? '',
@@ -103,8 +120,14 @@ const DEFAULTS: AppSettings = {
   smtpUser: process.env.SMTP_USER ?? '',
   smtpPassword: process.env.SMTP_PASSWORD ?? '',
   smtpFrom: process.env.SMTP_FROM ?? '',
+  aiProvider: 'groq',
+  aiApiKey: process.env.GROQ_API_KEY ?? '',
+  aiBaseUrl: '',
   groqApiKey: process.env.GROQ_API_KEY ?? '',
   aiModel: 'llama-3.3-70b-versatile',
+  jenkinsUrl: process.env.JENKINS_URL ?? '',
+  jenkinsUsername: process.env.JENKINS_USERNAME ?? '',
+  jenkinsApiToken: process.env.JENKINS_API_TOKEN ?? '',
   deploymentFrequencyTarget: 5,
   leadTimeTargetHours: 24,
   mttrTargetMinutes: 60,
@@ -131,9 +154,9 @@ const ENV_SEEDED: ReadonlyArray<keyof AppSettings> = [
   'giteaUrl', 'giteaToken', 'giteaWebhookSecret',
   'k8sApiUrl', 'k8sKubeconfig',
   'registryUrl',
-  'slackWebhookUrl',
+  'slackWebhookUrl', 'teamsWebhookUrl', 'customWebhookUrl',
   'smtpHost', 'smtpUser', 'smtpPassword', 'smtpFrom',
-  'groqApiKey',
+  'groqApiKey', 'aiApiKey',
 ]
 
 export function getSettings(): AppSettings {

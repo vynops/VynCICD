@@ -8,6 +8,7 @@ import { getSettings } from '@/lib/settings-store'
 interface TestResult {
   success: boolean
   message: string
+  suggestedUrl?: string
 }
 
 /** Raw HTTP/HTTPS fetch that ignores self-signed TLS — needed for k3d clusters */
@@ -35,20 +36,63 @@ function rawFetch(url: string, opts: { token?: string; basicAuth?: string; timeo
   })
 }
 
+function extractKubeconfigServers(content: string): string[] {
+  const servers = new Set<string>()
+  for (const line of content.split('\n')) {
+    const m = line.match(/^\s*server:\s*(\S+)/)
+    if (m?.[1]) servers.add(m[1].trim())
+  }
+  return Array.from(servers)
+}
+
+function normalizeLoopback(url: string): string {
+  try {
+    const u = new URL(url)
+    if (u.hostname === '0.0.0.0') u.hostname = '127.0.0.1'
+    return u.toString().replace(/\/$/, '')
+  } catch {
+    return url
+  }
+}
+
+async function suggestK8sUrl(kubeconfigPath?: string): Promise<string | null> {
+  if (!kubeconfigPath || !fs.existsSync(kubeconfigPath)) return null
+  const content = fs.readFileSync(kubeconfigPath, 'utf8')
+  const servers = extractKubeconfigServers(content).map(normalizeLoopback)
+  let firstReachable: string | null = null
+  for (const s of servers) {
+    try {
+      const r = await rawFetch(`${s}/version`, { timeout: 2500 })
+      if (r.status === 200 || r.status === 401 || r.status === 403) {
+        firstReachable = s
+        break
+      }
+    } catch {
+      // keep trying candidates
+    }
+  }
+  // Avoid suggesting stale ports when none are reachable.
+  return firstReachable
+}
+
 export async function POST(req: NextRequest) {
   const auth = await requireRole(req, 'viewer')
   if (auth instanceof NextResponse) return auth
 
-  const { target } = await req.json() as { target: string }
+  const { target, url } = await req.json() as { target: string; url?: string }
   const s = getSettings()
+  let attempted = ''
 
   try {
     /* ── Kubernetes API ── */
     if (target === 'k8s') {
-      if (!s.k8sApiUrl)
+      const effectiveUrl = (url && url.trim()) ? url.trim() : s.k8sApiUrl
+
+      if (!effectiveUrl)
         return NextResponse.json<TestResult>({ success: false, message: 'K8s API URL not configured.' })
 
-      const r = await rawFetch(`${s.k8sApiUrl}/version`, { token: s.k8sToken || undefined })
+      attempted = `${effectiveUrl}/version`
+      const r = await rawFetch(attempted, { token: s.k8sToken || undefined })
 
       if (r.status === 200) {
         const data = JSON.parse(r.body) as { gitVersion?: string }
@@ -89,7 +133,8 @@ export async function POST(req: NextRequest) {
 
       // Tier 1: no credentials — plain reachability
       if (!s.registryUsername) {
-        const r = await rawFetch(`${base}/v2/`, { timeout: 6000 })
+        attempted = `${base}/v2/`
+        const r = await rawFetch(attempted, { timeout: 6000 })
         if (r.status === 200)
           return NextResponse.json<TestResult>({ success: true, message: 'Registry reachable · open (no auth required)' })
         if (r.status === 401)
@@ -99,7 +144,8 @@ export async function POST(req: NextRequest) {
 
       // Tier 2: credentials set — try Basic auth
       const creds = Buffer.from(`${s.registryUsername}:${s.registryPassword}`).toString('base64')
-      const r = await rawFetch(`${base}/v2/`, { basicAuth: creds, timeout: 6000 })
+      attempted = `${base}/v2/`
+      const r = await rawFetch(attempted, { basicAuth: creds, timeout: 6000 })
       if (r.status === 200)
         return NextResponse.json<TestResult>({ success: true, message: `Authenticated as ${s.registryUsername} · registry accessible.` })
       if (r.status === 401)
@@ -109,13 +155,27 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json<TestResult>({ success: false, message: `Unknown target: ${target}` })
   } catch (e) {
-    const err = e as { cause?: { code?: string }; message?: string }
-    const code = err.cause?.code ?? ''
+    const err = e as NodeJS.ErrnoException & { cause?: { code?: string } }
+    const code = err.code ?? err.cause?.code ?? ''
     const friendly: Record<string, string> = {
       ECONNREFUSED: 'Connection refused — check the URL/port.',
       ENOTFOUND:    'Host not found — check the URL.',
       ETIMEDOUT:    'Timed out — host unreachable from this server.',
     }
-    return NextResponse.json<TestResult>({ success: false, message: friendly[code] ?? err.message ?? String(e) })
+    const where = attempted ? ` Endpoint: ${attempted}.` : ''
+    const codePart = code ? ` [${code}]` : ''
+    const detail = (err.message && err.message.trim().length > 0) ? ` ${err.message}` : ''
+    if (target === 'k8s' && code === 'ECONNREFUSED') {
+      const suggestedUrl = await suggestK8sUrl(s.k8sKubeconfig)
+      if (suggestedUrl) {
+        return NextResponse.json<TestResult>({
+          success: false,
+          message: `${friendly[code] ?? 'Connection test failed.'}${codePart}${where}${detail} Suggested URL from kubeconfig: ${suggestedUrl}`,
+          suggestedUrl,
+        })
+      }
+    }
+
+    return NextResponse.json<TestResult>({ success: false, message: `${friendly[code] ?? 'Connection test failed.'}${codePart}${where}${detail}` })
   }
 }

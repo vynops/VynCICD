@@ -1,7 +1,7 @@
 'use client'
 
 import useSWR from 'swr'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { CheckCircle, XCircle, Clock, RefreshCw, ChevronDown, ChevronRight, Download, Search, Filter } from 'lucide-react'
 import { timeAgo, duration, cn, exportCsv } from '@/lib/utils'
 import type { PipelineRun, StageRun } from '@/lib/data-store'
@@ -75,6 +75,12 @@ function RunDetail({ run }: { run: PipelineRun }) {
       {run.error && (
         <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-400">{run.error}</div>
       )}
+      {run.executionMode === 'jenkinsfile' && (
+        <div className="mb-4 p-3 rounded-lg bg-blue-500/10 border border-blue-500/20 text-xs text-blue-300">
+          Jenkinsfile pipeline{run.jenkinsBuildNumber != null ? ` · build #${run.jenkinsBuildNumber}` : ''}
+          {run.jenkinsBuildUrl && <a href={run.jenkinsBuildUrl} target="_blank" rel="noreferrer" className="ml-2 underline hover:text-white">Open Jenkins</a>}
+        </div>
+      )}
       {run.aiTriage && (
         <div className="mb-4 p-3 rounded-lg bg-violet-500/10 border border-violet-500/20">
           <div className="text-[10px] font-bold text-violet-400 uppercase tracking-wider mb-1">🤖 AI Triage</div>
@@ -90,10 +96,19 @@ function RunDetail({ run }: { run: PipelineRun }) {
 }
 
 export default function RunsPage() {
-  const { data: runs = [] } = useSWR<PipelineRun[]>('/api/runs?limit=100', fetcher, { refreshInterval: 15000 })
+  const { data: runs = [], mutate } = useSWR<PipelineRun[]>('/api/runs?limit=100', fetcher, { refreshInterval: 15000 })
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [expandedId, setExpandedId] = useState<string | null>(null)
+
+  useEffect(() => {
+    const run = runs.find(item => item.id === expandedId)
+    if (!run || run.executionMode !== 'jenkinsfile' || run.status === 'success' || run.status === 'failed' || run.status === 'cancelled') return
+    const poll = () => fetch(`/api/runs/${run.id}/jenkins`).then(() => mutate()).catch(() => {})
+    poll()
+    const timer = window.setInterval(poll, 5000)
+    return () => window.clearInterval(timer)
+  }, [expandedId, runs, mutate])
 
   const filtered = runs.filter(r => {
     const matchStatus = statusFilter === 'all' || r.status === statusFilter

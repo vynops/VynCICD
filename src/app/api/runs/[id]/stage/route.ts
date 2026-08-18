@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { loadRuns, updateRun, savePipelines, loadPipelines, addDeployment, type PipelineRunStatus } from '@/lib/data-store'
 import { createIncident, loadIncidents } from '@/lib/oncall-store'
+import { getSettings } from '@/lib/settings-store'
+import { notifyBuildFailed, notifyBuildSucceeded, notifyDeployFailed, notifyIncidentOpened } from '@/lib/notifier'
 
 const RUNNER_SECRET = process.env.RUNNER_SECRET ?? process.env.VYNCICD_SECRET ?? ''
 
@@ -18,6 +20,14 @@ interface StageUpdate {
   exitCode?: number
   image?: string
   k8sNamespace?: string
+}
+
+function recipientsFromSettings(): string[] {
+  const s = getSettings()
+  return (s.alertRecipients ?? '')
+    .split(',')
+    .map(v => v.trim())
+    .filter(Boolean)
 }
 
 // POST /api/runs/[id]/stage — runner reports stage status change
@@ -76,6 +86,7 @@ export async function POST(
   if (!updated) return NextResponse.json({ error: 'update failed' }, { status: 500 })
 
   // Auto-create incident when a run transitions to failed
+  let createdIncident: ReturnType<typeof createIncident> | null = null
   if (runStatus === 'failed' && run.status !== 'failed') {
     try {
       const existing = loadIncidents().find(i => i.runId === id && i.status !== 'resolved')
@@ -88,7 +99,7 @@ export async function POST(
           : stageType === 'build' ? 'build-failure'
           : 'build-failure'
         const severity = (stageType === 'deploy' || stageType === 'scan') ? 'high' : 'medium'
-        createIncident({
+        createdIncident = createIncident({
           title: `Pipeline failed: ${run.pipelineName} on ${run.branch}`,
           severity,
           status: 'open',
@@ -102,6 +113,60 @@ export async function POST(
         })
       }
     } catch { /* non-fatal */ }
+  }
+
+  // Fire notifications for terminal transitions only once per run transition
+  if (run.status !== runStatus) {
+    const emails = recipientsFromSettings()
+    if (runStatus === 'failed') {
+      const failedStage = run.stages.find(s => s.status === 'failed')
+      const errText = failedStage?.logs?.slice(-1)[0] ?? `Stage "${failedStage?.name ?? 'unknown'}" failed`
+      notifyBuildFailed({
+        pipeline: run.pipelineName,
+        repo: run.repoFullName,
+        branch: run.branch,
+        commit: run.commit,
+        author: run.author,
+        error: errText,
+        runUrl: `/runs/${id}`,
+        emails,
+      }).catch(() => {})
+
+      if (failedStage?.type === 'deploy' && failedStage.environment) {
+        notifyDeployFailed({
+          pipeline: run.pipelineName,
+          environment: failedStage.environment,
+          repo: run.repoFullName,
+          emails,
+        }).catch(() => {})
+      }
+
+      if (createdIncident) {
+        notifyIncidentOpened({
+          title: createdIncident.title,
+          severity: createdIncident.severity,
+          category: createdIncident.category,
+          source: createdIncident.source,
+          runId: createdIncident.runId,
+          repo: createdIncident.repo,
+          branch: createdIncident.branch,
+          commit: createdIncident.commit,
+          emails,
+        }).catch(() => {})
+      }
+    }
+
+    if (runStatus === 'success') {
+      notifyBuildSucceeded({
+        pipeline: run.pipelineName,
+        repo: run.repoFullName,
+        branch: run.branch,
+        commit: run.commit,
+        author: run.author,
+        durationMs: updated.durationMs ?? 0,
+        emails,
+      }).catch(() => {})
+    }
   }
 
   // Sync pipeline lastRunStatus

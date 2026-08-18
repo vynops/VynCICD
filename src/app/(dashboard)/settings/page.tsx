@@ -8,6 +8,7 @@ import type { AppSettings } from '@/lib/settings-store'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 
 const fetcher = (url: string) => fetch(url).then(r => r.json())
+const CONFIGURED_MASK = '***configured***'
 
 const TABS = [
   { id: 'k8s',        label: 'Kubernetes',      icon: Server },
@@ -18,6 +19,66 @@ const TABS = [
   { id: 'dora',       label: 'DORA Targets',    icon: BarChart2 },
   { id: 'usage',      label: 'Token Usage',     icon: Activity },
 ]
+
+const AI_PROVIDERS = [
+  {
+    id: 'groq',
+    label: 'Groq (Recommended)',
+    keyLabel: 'Groq API Key',
+    keyPlaceholder: 'gsk_...',
+    defaultModel: 'llama-3.3-70b-versatile',
+    models: [
+      { value: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B Versatile' },
+      { value: 'llama-3.1-8b-instant', label: 'Llama 3.1 8B Instant (Fast)' },
+      { value: 'mixtral-8x7b-32768', label: 'Mixtral 8x7B (Long Context)' },
+      { value: 'gemma2-9b-it', label: 'Gemma 2 9B' },
+    ],
+  },
+  {
+    id: 'openai',
+    label: 'OpenAI',
+    keyLabel: 'OpenAI API Key',
+    keyPlaceholder: 'sk-...',
+    defaultModel: 'gpt-4o-mini',
+    models: [
+      { value: 'gpt-4o', label: 'GPT-4o' },
+      { value: 'gpt-4o-mini', label: 'GPT-4o Mini' },
+      { value: 'gpt-4.1-mini', label: 'GPT-4.1 Mini' },
+    ],
+  },
+  {
+    id: 'anthropic',
+    label: 'Anthropic (Claude)',
+    keyLabel: 'Claude API Key',
+    keyPlaceholder: 'sk-ant-...',
+    defaultModel: 'claude-3-5-sonnet-latest',
+    models: [
+      { value: 'claude-3-5-sonnet-latest', label: 'Claude 3.5 Sonnet' },
+      { value: 'claude-3-7-sonnet-latest', label: 'Claude 3.7 Sonnet' },
+      { value: 'claude-3-5-haiku-latest', label: 'Claude 3.5 Haiku' },
+    ],
+  },
+  {
+    id: 'google',
+    label: 'Google (Gemini)',
+    keyLabel: 'Gemini API Key',
+    keyPlaceholder: 'AIza...',
+    defaultModel: 'gemini-2.0-flash',
+    models: [
+      { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
+      { value: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro' },
+      { value: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash' },
+    ],
+  },
+  {
+    id: 'custom',
+    label: 'Custom / Self-Hosted',
+    keyLabel: 'API Key',
+    keyPlaceholder: 'your-api-key',
+    defaultModel: 'your-model-id',
+    models: [] as Array<{ value: string; label: string }>,
+  },
+] as const
 
 function SourceBadge({ source }: { source: string }) {
   const isEnv = source.startsWith('env')
@@ -99,13 +160,23 @@ export default function SettingsPage() {
   const [form, setForm] = useState<Partial<AppSettings>>({})
   const [saved, setSaved]   = useState(false)
   const [saving, setSaving] = useState(false)
-  const [testResults, setTestResults] = useState<Record<string, { loading: boolean; success?: boolean; message?: string }>>({})
+  const [testResults, setTestResults] = useState<Record<string, { loading: boolean; success?: boolean; message?: string; suggestedUrl?: string }>>({})
 
-  useEffect(() => { if (rawSettings) setForm(rawSettings) }, [rawSettings])
+  useEffect(() => {
+    if (!rawSettings) return
+    const hasStoredAiKey = Boolean((rawSettings.aiApiKey ?? '').trim()) || Boolean((rawSettings.groqApiKey ?? '').trim())
+    setForm({
+      ...rawSettings,
+      aiApiKey: hasStoredAiKey ? CONFIGURED_MASK : '',
+      k8sToken: rawSettings.k8sToken ? CONFIGURED_MASK : '',
+      registryPassword: rawSettings.registryPassword ? CONFIGURED_MASK : '',
+      jenkinsApiToken: rawSettings.jenkinsApiToken ? CONFIGURED_MASK : '',
+    })
+  }, [rawSettings])
 
   const update = <K extends keyof AppSettings>(key: K, val: AppSettings[K]) => setForm(f => ({ ...f, [key]: val }))
 
-  async function testConnection(key: string, endpoint: string, body: Record<string, string>) {
+  async function testConnection(key: string, endpoint: string, body: Record<string, unknown>) {
     setTestResults(prev => ({ ...prev, [key]: { loading: true } }))
     try {
       const res = await fetch(endpoint, {
@@ -113,22 +184,41 @@ export default function SettingsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })
-      const data = await res.json() as { success: boolean; message: string }
-      setTestResults(prev => ({ ...prev, [key]: { loading: false, success: data.success, message: data.message } }))
+      const data = await res.json() as { success?: boolean; ok?: boolean; message?: string; suggestedUrl?: string }
+      setTestResults(prev => ({
+        ...prev,
+        [key]: {
+          loading: false,
+          success: data.success ?? data.ok ?? res.ok,
+          message: data.message ?? (res.ok ? 'Connection successful' : 'Connection failed'),
+          suggestedUrl: data.suggestedUrl,
+        },
+      }))
     } catch {
       setTestResults(prev => ({ ...prev, [key]: { loading: false, success: false, message: 'Network error' } }))
     }
   }
 
-  function TestConnBtn({ id, endpoint, body, label = 'Test connection' }: { id: string; endpoint: string; body: Record<string, string>; label?: string }) {
+  function TestConnBtn({ id, endpoint, body, label = 'Test connection' }: { id: string; endpoint: string; body: Record<string, unknown>; label?: string }) {
     const r = testResults[id]
     return (
       <div className="flex items-center gap-2">
         {r && !r.loading && (
-          <span className={cn('flex items-center gap-1 text-[10px]', r.success ? 'text-emerald-400' : 'text-red-400')}>
-            {r.success ? <CheckCircle2 className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
-            {r.message}
-          </span>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className={cn('flex items-center gap-1 text-[10px]', r.success ? 'text-emerald-400' : 'text-red-400')}>
+              {r.success ? <CheckCircle2 className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
+              {r.message}
+            </span>
+            {id === 'k8s' && r.suggestedUrl && (
+              <button
+                type="button"
+                onClick={() => update('k8sApiUrl', r.suggestedUrl as AppSettings['k8sApiUrl'])}
+                className="px-2 py-0.5 rounded border border-emerald-700/60 text-emerald-400 text-[10px] hover:bg-emerald-500/10"
+              >
+                Use suggested URL
+              </button>
+            )}
+          </div>
         )}
         <button onClick={() => testConnection(id, endpoint, body)} disabled={r?.loading}
           className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-medium bg-slate-800 border border-slate-700 text-slate-400 hover:text-white hover:border-slate-500 disabled:opacity-50 transition-colors">
@@ -141,11 +231,29 @@ export default function SettingsPage() {
 
   async function save() {
     setSaving(true)
-    await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
+    const payload: Partial<AppSettings> = { ...form }
+    if ((payload.aiApiKey ?? '') === CONFIGURED_MASK) delete payload.aiApiKey
+    if ((payload.k8sToken ?? '') === CONFIGURED_MASK) delete payload.k8sToken
+    if ((payload.registryPassword ?? '') === CONFIGURED_MASK) delete payload.registryPassword
+    if ((payload.jenkinsApiToken ?? '') === CONFIGURED_MASK) delete payload.jenkinsApiToken
+    await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
     setSaving(false)
     setSaved(true)
+    setForm(prev => ({
+      ...prev,
+      aiApiKey: (prev.aiApiKey ?? '') ? CONFIGURED_MASK : '',
+      k8sToken: (prev.k8sToken ?? '') ? CONFIGURED_MASK : '',
+      registryPassword: (prev.registryPassword ?? '') ? CONFIGURED_MASK : '',
+      jenkinsApiToken: (prev.jenkinsApiToken ?? '') ? CONFIGURED_MASK : '',
+    }))
     setTimeout(() => setSaved(false), 3000)
   }
+
+  const providerId = form.aiProvider ?? 'groq'
+  const currentProvider = AI_PROVIDERS.find(p => p.id === providerId) ?? AI_PROVIDERS[0]
+  const availableModels = currentProvider.models.length > 0
+    ? currentProvider.models
+    : [{ value: form.aiModel ?? currentProvider.defaultModel, label: `${form.aiModel ?? currentProvider.defaultModel} (custom)` }]
 
   if (!rawSettings) return <div className="flex items-center justify-center h-64 text-slate-600 text-sm">Loading settings…</div>
 
@@ -176,9 +284,9 @@ export default function SettingsPage() {
             <p className="text-[11px] text-slate-500 -mt-1">Cluster: <span className="font-mono text-slate-400">k3d-cicd</span> (1 server + 2 agents). API URL and kubeconfig path seeded from <span className="font-mono text-amber-500/70">.env.local</span>.</p>
             <p className="text-[10px] text-slate-600 -mt-2 italic">Tests run server-side — the configured URLs must be reachable from the host running VynCICD.</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Field label="API Server URL" source="env · K8S_API_URL">
-                <Input value={form.k8sApiUrl ?? ''} onChange={v => update('k8sApiUrl', v)} placeholder="https://172.20.0.2:6443" readOnly />
-                <div className="mt-1.5"><TestConnBtn id="k8s" endpoint="/api/settings/test-k8s" body={{ target: 'k8s' }} /></div>
+              <Field label="API Server URL" source="settings.json · defaults from env K8S_API_URL" desc="Editable. If connection is refused, test can suggest a live URL from kubeconfig.">
+                <Input value={form.k8sApiUrl ?? ''} onChange={v => update('k8sApiUrl', v)} placeholder="https://127.0.0.1:41815" />
+                <div className="mt-1.5"><TestConnBtn id="k8s" endpoint="/api/settings/test-k8s" body={{ target: 'k8s', url: form.k8sApiUrl ?? '' }} /></div>
               </Field>
               <Field label="Kubeconfig Path" source="env · K8S_KUBECONFIG">
                 <Input value={form.k8sKubeconfig ?? ''} onChange={v => update('k8sKubeconfig', v)} placeholder="/home/labcicd/kubeconfig/cicd.yaml" readOnly />
@@ -205,6 +313,17 @@ export default function SettingsPage() {
         {tab === 'pipeline' && (
           <>
             <h3 className="text-sm font-semibold text-white">Build Defaults</h3>
+            <div className="border-b border-slate-800 pb-5 space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-white">Jenkins</h3>
+                <TestConnBtn id="jenkins" endpoint="/api/settings/test-jenkins" body={{}} label="Test connection" />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <Field label="Jenkins URL" source="settings.json"><Input value={form.jenkinsUrl ?? ''} onChange={v => update('jenkinsUrl', v)} placeholder="https://jenkins.example.com" /></Field>
+                <Field label="Jenkins Username" source="settings.json"><Input value={form.jenkinsUsername ?? ''} onChange={v => update('jenkinsUsername', v)} placeholder="ci-bot" /></Field>
+                <Field label="Jenkins API Token" source="settings.json"><RevealInput value={form.jenkinsApiToken ?? ''} onChange={v => update('jenkinsApiToken', v)} placeholder="••••••••" /></Field>
+              </div>
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <Field label="Default Retry Count">
                 <NumberInput value={form.defaultRetryCount ?? 2} onChange={v => update('defaultRetryCount', v)} min={0} max={5} />
@@ -246,6 +365,15 @@ export default function SettingsPage() {
                 </Field>
               )}
             </div>
+            <div className="border-t border-slate-800 pt-5 mb-6">
+              <h3 className="text-sm font-semibold text-white mb-4">Delivery Channels</h3>
+              <div className="space-y-3">
+                <Toggle checked={form.alertSlackEnabled ?? true} onChange={v => update('alertSlackEnabled', v)} label="Enable Slack notifications" />
+                <Toggle checked={form.alertTeamEnabled ?? false} onChange={v => update('alertTeamEnabled', v)} label="Enable Team (Microsoft Teams) notifications" />
+                <Toggle checked={form.alertWebhookEnabled ?? false} onChange={v => update('alertWebhookEnabled', v)} label="Enable custom webhook notifications" />
+                <Toggle checked={form.alertEmailEnabled ?? false} onChange={v => update('alertEmailEnabled', v)} label="Enable email notifications" />
+              </div>
+            </div>
             <div className="border-t border-slate-800 pt-5">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-semibold text-white">Slack</h3>
@@ -255,10 +383,25 @@ export default function SettingsPage() {
             </div>
             <div className="border-t border-slate-800 pt-5">
               <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-semibold text-white">Team (Microsoft Teams)</h3>
+                <TestConnBtn id="team" endpoint="/api/settings/test-notification" body={{ target: 'team' }} label="Send test message" />
+              </div>
+              <Field label="Incoming Webhook URL" source="env · TEAMS_WEBHOOK_URL"><Input value={form.teamsWebhookUrl ?? ''} onChange={v => update('teamsWebhookUrl', v)} placeholder="https://outlook.office.com/webhook/..." /></Field>
+            </div>
+            <div className="border-t border-slate-800 pt-5">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-semibold text-white">Custom Webhook</h3>
+                <TestConnBtn id="webhook" endpoint="/api/settings/test-notification" body={{ target: 'webhook' }} label="Send test event" />
+              </div>
+              <Field label="Webhook URL" source="env · CUSTOM_WEBHOOK_URL" desc="Sends a JSON POST payload for pipeline and incident notifications.">
+                <Input value={form.customWebhookUrl ?? ''} onChange={v => update('customWebhookUrl', v)} placeholder="https://example.com/hooks/vyncicd" />
+              </Field>
+            </div>
+            <div className="border-t border-slate-800 pt-5">
+              <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-semibold text-white">Email (SMTP)</h3>
                 {form.alertEmailEnabled && <TestConnBtn id="smtp" endpoint="/api/settings/test-notification" body={{ target: 'smtp' }} label="Test connection" />}
               </div>
-              <Toggle checked={form.alertEmailEnabled ?? false} onChange={v => update('alertEmailEnabled', v)} label="Enable email notifications" />
               {form.alertEmailEnabled && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
                   <Field label="SMTP Host" source="env · SMTP_HOST"><Input value={form.smtpHost ?? ''} onChange={v => update('smtpHost', v)} placeholder="smtp.gmail.com" /></Field>
@@ -280,17 +423,47 @@ export default function SettingsPage() {
           <>
             <h3 className="text-sm font-semibold text-white">AI Copilot</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Field label="Groq API Key" desc="Free at console.groq.com — or set GROQ_API_KEY in .env.local" source="env · GROQ_API_KEY">
-                <RevealInput value={form.groqApiKey ?? ''} onChange={v => update('groqApiKey', v)} placeholder="gsk_…" />
+              <Field label="AI Provider" source="settings.json">
+                <select
+                  value={providerId}
+                  onChange={e => {
+                    const selected = AI_PROVIDERS.find(p => p.id === e.target.value) ?? AI_PROVIDERS[0]
+                    update('aiProvider', selected.id)
+                    update('aiModel', selected.defaultModel)
+                  }}
+                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-sm text-white focus:outline-none focus:border-emerald-500/50"
+                >
+                  {AI_PROVIDERS.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
+                </select>
+              </Field>
+              <Field label={currentProvider.keyLabel} desc="Stored in settings.json unless provided by environment." source="settings.json">
+                <RevealInput value={form.aiApiKey ?? ''} onChange={v => update('aiApiKey', v)} placeholder={currentProvider.keyPlaceholder} />
               </Field>
               <Field label="Model" source="settings.json">
-                <select value={form.aiModel ?? 'llama-3.3-70b-versatile'} onChange={e => update('aiModel', e.target.value)}
+                <select value={form.aiModel ?? currentProvider.defaultModel} onChange={e => update('aiModel', e.target.value)}
                   className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-sm text-white focus:outline-none focus:border-emerald-500/50">
-                  <option value="llama-3.3-70b-versatile">Llama 3.3 70B (recommended)</option>
-                  <option value="llama-3.1-8b-instant">Llama 3.1 8B (fastest)</option>
-                  <option value="mixtral-8x7b-32768">Mixtral 8×7B</option>
-                  <option value="gemma2-9b-it">Gemma 2 9B</option>
+                  {availableModels.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
                 </select>
+              </Field>
+              {providerId === 'custom' && (
+                <Field label="OpenAI-Compatible Base URL" desc="Example: https://api.example.com/v1" source="settings.json">
+                  <Input value={form.aiBaseUrl ?? ''} onChange={v => update('aiBaseUrl', v)} placeholder="https://api.example.com/v1" />
+                </Field>
+              )}
+              <Field label="AI Connection Test">
+                <div className="flex items-center gap-2">
+                  <TestConnBtn
+                    id="ai"
+                    endpoint="/api/copilot/test"
+                    body={{
+                      provider: providerId,
+                      apiKey: form.aiApiKey ?? '',
+                      model: form.aiModel ?? currentProvider.defaultModel,
+                      baseUrl: form.aiBaseUrl ?? '',
+                    }}
+                    label="Test AI provider"
+                  />
+                </div>
               </Field>
               <Field label="Refresh Interval (seconds)">
                 <NumberInput value={form.defaultRefreshInterval ?? 30} onChange={v => update('defaultRefreshInterval', v)} min={10} max={300} />

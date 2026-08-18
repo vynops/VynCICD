@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireRole } from '@/lib/auth'
 import { loadRuns, loadDeployments } from '@/lib/data-store'
 import { loadIncidents } from '@/lib/oncall-store'
+import { getSettings } from '@/lib/settings-store'
 
 // Summary endpoint for the overview DORA widget
 export async function GET(req: NextRequest) {
@@ -11,6 +12,7 @@ export async function GET(req: NextRequest) {
   const runs = loadRuns()
   const deps = loadDeployments()
   const incidents = loadIncidents()
+  const settings = getSettings()
   const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000
   const recentDeps = deps.filter(d => new Date(d.deployedAt).getTime() > thirtyDaysAgo)
   const recentRuns = runs.filter(r => new Date(r.startedAt).getTime() > thirtyDaysAgo)
@@ -39,5 +41,16 @@ export async function GET(req: NextRequest) {
       )
     : null  // null = no resolved incidents yet; UI should show '—' not a fake number
 
-  return NextResponse.json({ deployFrequency, leadTimeHours, mttrMinutes, changeFailureRate })
+  return NextResponse.json({
+    deployFrequency,
+    leadTimeHours,
+    mttrMinutes,
+    changeFailureRate,
+    targets: {
+      deploymentFrequency: settings.deploymentFrequencyTarget,
+      leadTimeHours: settings.leadTimeTargetHours,
+      mttrMinutes: settings.mttrTargetMinutes,
+      changeFailureRate: settings.changeFailureRateTarget,
+    },
+  })
 }

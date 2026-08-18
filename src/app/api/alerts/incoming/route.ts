@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createIncident } from '@/lib/oncall-store'
 import type { Incident } from '@/lib/oncall-store'
+import { getSettings } from '@/lib/settings-store'
+import { notifyIncidentOpened } from '@/lib/notifier'
 
 // Prometheus AlertManager sends an array of alerts
 interface AmAlert {
@@ -28,6 +30,14 @@ function amSeverityToIncident(s: string): Incident['severity'] {
     case 'warning': return 'medium'
     default: return 'low'
   }
+}
+
+function recipientsFromSettings(): string[] {
+  const s = getSettings()
+  return (s.alertRecipients ?? '')
+    .split(',')
+    .map(v => v.trim())
+    .filter(Boolean)
 }
 
 export async function POST(req: NextRequest) {
@@ -67,6 +77,18 @@ export async function POST(req: NextRequest) {
       source: `alertmanager:${alert.labels?.alertname ?? 'unknown'}`,
       notes: alert.annotations?.description ?? alert.annotations?.message ?? '',
     })
+
+    notifyIncidentOpened({
+      title: inc.title,
+      severity: inc.severity,
+      category: inc.category,
+      source: inc.source,
+      runId: inc.runId,
+      repo: inc.repo,
+      branch: inc.branch,
+      commit: inc.commit,
+      emails: recipientsFromSettings(),
+    }).catch(() => {})
 
     created.push(inc.id)
     console.log(`[alerts/incoming] created incident ${inc.id} "${inc.title}" severity=${inc.severity}`)

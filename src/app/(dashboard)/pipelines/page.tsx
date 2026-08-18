@@ -50,7 +50,7 @@ export default function PipelinesPage() {
   // New pipeline modal state
   const [showModal, setShowModal] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [form, setForm] = useState({ name: '', repoId: '', branch: 'main' })
+  const [form, setForm] = useState({ name: '', repoId: '', branch: 'main', executionMode: 'native' as 'native' | 'jenkinsfile', jenkinsJob: '', jenkinsfilePath: 'Jenkinsfile', jenkinsParameters: '' })
   const [stages, setStages] = useState<PipelineStage[]>([
     { ...STAGE_DEFAULTS.lint } as PipelineStage,
     { ...STAGE_DEFAULTS.test } as PipelineStage,
@@ -63,7 +63,7 @@ export default function PipelinesPage() {
 
   function openModal() {
     setEditingId(null)
-    setForm({ name: '', repoId: repos[0]?.id ?? '', branch: 'main' })
+    setForm({ name: '', repoId: repos[0]?.id ?? '', branch: 'main', executionMode: 'native', jenkinsJob: '', jenkinsfilePath: 'Jenkinsfile', jenkinsParameters: '' })
     setStages([
       { ...STAGE_DEFAULTS.lint } as PipelineStage,
       { ...STAGE_DEFAULTS.test } as PipelineStage,
@@ -92,10 +92,11 @@ export default function PipelinesPage() {
       setError('Name, repository and branch are required.')
       return
     }
-    if (stages.length === 0) { setError('Add at least one stage.'); return }
-    for (const s of stages) {
+    if (form.executionMode === 'native' && stages.length === 0) { setError('Add at least one stage.'); return }
+    if (form.executionMode === 'native') for (const s of stages) {
       if (!s.name.trim()) { setError('All stages must have a name.'); return }
     }
+    if (form.executionMode === 'jenkinsfile' && !form.jenkinsJob.trim()) { setError('Jenkins job is required.'); return }
     setSaving(true); setError('')
     try {
       const res = await fetch('/api/pipelines', {
@@ -106,7 +107,11 @@ export default function PipelinesPage() {
           repoId: form.repoId,
           branch: form.branch.trim(),
           triggerOn: ['push'],
-          stages,
+          executionMode: form.executionMode,
+          jenkinsJob: form.executionMode === 'jenkinsfile' ? form.jenkinsJob.trim() : undefined,
+          jenkinsfilePath: form.executionMode === 'jenkinsfile' ? form.jenkinsfilePath.trim() || 'Jenkinsfile' : undefined,
+          jenkinsParameters: form.executionMode === 'jenkinsfile' ? Object.fromEntries(form.jenkinsParameters.split('\n').map(line => line.split('=').map(v => v.trim())).filter(pair => pair.length === 2 && pair[0])) : undefined,
+          stages: form.executionMode === 'native' ? stages : [],
           environments: stages.filter(s => s.environment).map(s => s.environment!),
         }),
       })
@@ -120,7 +125,7 @@ export default function PipelinesPage() {
 
   function openEditModal(p: Pipeline) {
     setEditingId(p.id)
-    setForm({ name: p.name, repoId: p.repoId, branch: p.branch })
+    setForm({ name: p.name, repoId: p.repoId, branch: p.branch, executionMode: p.executionMode ?? 'native', jenkinsJob: p.jenkinsJob ?? '', jenkinsfilePath: p.jenkinsfilePath ?? 'Jenkinsfile', jenkinsParameters: Object.entries(p.jenkinsParameters ?? {}).map(([key, value]) => `${key}=${value}`).join('\n') })
     setStages(p.stages.map(s => ({ ...s })))
     setError('')
     setShowModal(true)
@@ -131,10 +136,11 @@ export default function PipelinesPage() {
       setError('Name, repository and branch are required.')
       return
     }
-    if (stages.length === 0) { setError('Add at least one stage.'); return }
-    for (const s of stages) {
+    if (form.executionMode === 'native' && stages.length === 0) { setError('Add at least one stage.'); return }
+    if (form.executionMode === 'native') for (const s of stages) {
       if (!s.name.trim()) { setError('All stages must have a name.'); return }
     }
+    if (form.executionMode === 'jenkinsfile' && !form.jenkinsJob.trim()) { setError('Jenkins job is required.'); return }
     setSaving(true); setError('')
     try {
       const res = await fetch(`/api/pipelines/${editingId}`, {
@@ -144,7 +150,11 @@ export default function PipelinesPage() {
           name: form.name.trim(),
           repoId: form.repoId,
           branch: form.branch.trim(),
-          stages,
+          executionMode: form.executionMode,
+          jenkinsJob: form.executionMode === 'jenkinsfile' ? form.jenkinsJob.trim() : undefined,
+          jenkinsfilePath: form.executionMode === 'jenkinsfile' ? form.jenkinsfilePath.trim() || 'Jenkinsfile' : undefined,
+          jenkinsParameters: form.executionMode === 'jenkinsfile' ? Object.fromEntries(form.jenkinsParameters.split('\n').map(line => line.split('=').map(v => v.trim())).filter(pair => pair.length === 2 && pair[0])) : undefined,
+          stages: form.executionMode === 'native' ? stages : [],
           environments: stages.filter(s => s.environment).map(s => s.environment!),
         }),
       })
@@ -272,7 +282,7 @@ export default function PipelinesPage() {
               </div>
 
               {/* Stages */}
-              <div className="mb-5">
+              {selected.executionMode !== 'jenkinsfile' && <div className="mb-5">
                 <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Stages</div>
                 <div className="flex flex-wrap gap-2 items-center">
                   {selected.stages.map((stage, i) => (
@@ -287,7 +297,14 @@ export default function PipelinesPage() {
                     </div>
                   ))}
                 </div>
-              </div>
+              </div>}
+              {selected.executionMode === 'jenkinsfile' && (
+                <div className="mb-5 grid grid-cols-2 gap-3">
+                  <div className="bg-slate-900/50 rounded-lg p-3"><div className="text-[10px] text-slate-500 mb-1">Execution</div><div className="text-xs text-white">Jenkinsfile via Jenkins</div></div>
+                  <div className="bg-slate-900/50 rounded-lg p-3"><div className="text-[10px] text-slate-500 mb-1">Jenkins job</div><div className="text-xs text-white font-mono truncate">{selected.jenkinsJob}</div></div>
+                  <div className="bg-slate-900/50 rounded-lg p-3"><div className="text-[10px] text-slate-500 mb-1">Jenkinsfile</div><div className="text-xs text-white font-mono truncate">{selected.jenkinsfilePath ?? 'Jenkinsfile'}</div></div>
+                </div>
+              )}
 
               {/* Config */}
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -359,8 +376,27 @@ export default function PipelinesPage() {
                 </div>
               </div>
 
+              <div className="space-y-3">
+                <label className="block text-[11px] text-slate-400">Execution mode *</label>
+                <select
+                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500"
+                  value={form.executionMode}
+                  onChange={e => setForm(f => ({ ...f, executionMode: e.target.value as 'native' | 'jenkinsfile' }))}
+                >
+                  <option value="native">Native VynCICD stages</option>
+                  <option value="jenkinsfile">Jenkinsfile via Jenkins</option>
+                </select>
+                {form.executionMode === 'jenkinsfile' && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <input className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500" placeholder="Jenkins job, e.g. team/api-build" value={form.jenkinsJob} onChange={e => setForm(f => ({ ...f, jenkinsJob: e.target.value }))} />
+                    <input className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500" placeholder="Jenkinsfile path" value={form.jenkinsfilePath} onChange={e => setForm(f => ({ ...f, jenkinsfilePath: e.target.value }))} />
+                    <textarea className="sm:col-span-2 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white font-mono placeholder-slate-600 focus:outline-none focus:border-emerald-500 resize-none" rows={3} placeholder="Optional parameters, one KEY=VALUE per line" value={form.jenkinsParameters} onChange={e => setForm(f => ({ ...f, jenkinsParameters: e.target.value }))} />
+                  </div>
+                )}
+              </div>
+
               {/* Stages */}
-              <div>
+              {form.executionMode === 'native' && <div>
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Stages</span>
                   <button onClick={addStage} className="text-[11px] text-emerald-400 hover:text-emerald-300 flex items-center gap-1">
@@ -436,7 +472,7 @@ export default function PipelinesPage() {
                     </div>
                   ))}
                 </div>
-              </div>
+              </div>}
 
               {error && <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">{error}</p>}
             </div>
