@@ -1,450 +1,1210 @@
 # VynCICD
 
-**Self-hosted CI/CD pipeline platform with AI failure triage, Kubernetes-native deployments, and DORA metrics.**
+**A self-hosted CI/CD control plane for native pipelines, Jenkinsfile execution, Kubernetes delivery, security scanning, notifications, AI triage, and DORA metrics.**
 
-Connect your repositories, define pipelines in YAML, deploy to Kubernetes, and let the AI explain every failure — all in a single open-source platform you own and run.
+VynCICD gives teams one place to connect repositories, define or trigger pipelines, inspect runs, track deployments, manage incidents, and compare engineering performance.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=nextdotjs)](https://nextjs.org)
-[![Node.js](https://img.shields.io/badge/Node.js-18%2B-green?logo=nodedotjs)](https://nodejs.org)
-[![GitHub](https://img.shields.io/badge/GitHub-vynops%2FVynCICD-181717?logo=github)](https://github.com/vynops/VynCICD)
-[![Part of VynOps Suite](https://img.shields.io/badge/VynOps-Suite-06b6d4)](https://github.com/vynops)
+```text
+Native pipeline:
+  VynCICD -> VynCICD runner -> stages execute
 
----
+Jenkinsfile pipeline:
+  VynCICD -> Jenkins -> Jenkinsfile executes -> VynCICD tracks the result
+```
 
-## What is VynCICD?
-
-VynCICD is a complete CI/CD operations platform built for teams who want full control over their delivery pipeline. Connect a Gitea, GitHub, GitLab, or Bitbucket repository, define your stages, and let VynCICD handle the rest:
-
-- **Pipeline runner** — executes lint, test, build, scan, and deploy stages on your own infrastructure
-- **Kubernetes deployments** — apply manifests with dynamic cluster targeting per environment
-- **Security scanning** — Trivy container image scanning blocks deploys on critical CVEs
-- **DORA metrics** — deployment frequency, lead time, MTTR, and change failure rate from real data
-- **AI Copilot** — ask natural language questions about your pipelines, failures, and metrics
-- **Incident management** — auto-create incidents on pipeline failure with SLA tracking and on-call routing
-- **Team access control** — admin, editor, and viewer roles with full audit trail
-
-No cloud vendor lock-in. No per-seat pricing. Your servers, your data.
+VynCICD is the control plane and dashboard. The selected execution engine owns the actual work.
 
 ---
 
-## Features
+## Contents
 
-### Pipeline Orchestration
-- YAML-defined pipeline stages: `run`, `test`, `build`, `scan`, `deploy`, `notify`
-- Stage dependency resolution and sequential execution
-- Configurable retry count, timeout per stage, and allow-failure flags
-- Manual trigger from the dashboard or auto-trigger on push/PR/tag/schedule
-- Live stage logs streamed to the dashboard as they run
-
-### Repository Management
-- Connect Gitea, GitHub, GitLab, and Bitbucket repositories from the UI
-- Inline credential management with test-connection validation
-- Webhook URL display per provider for quick configuration
-- Webhook secret verification (HMAC) on all incoming events
-- Repository edit: description, branch, clone URL, webhook status
-
-### Kubernetes Deployments
-- Deploy stages target named environments (staging, production, etc.)
-- Per-environment cluster name (`$DEPLOY_CLUSTER`) resolved from the Environments registry
-- Manifest YAML stored inline in the pipeline stage — no separate files needed
-- Deployment records auto-created on successful deploy stage
-- Rollback support from the Deployments page
-
-### Environments
-- Named deployment targets (development, staging, production, preview)
-- Cluster name field → passed as `$DEPLOY_CLUSTER` to the runner
-- Approval gates: require manual sign-off before production deploys
-- Approver email list per environment
-- Protection flag for staging and production environments
-
-### Security Scanning
-- Trivy container image scanning at the `scan` stage
-- CRITICAL/HIGH CVE reporting with pass/fail/warning/skip status
-- Per-run scan history with vulnerability breakdown
-- Block-on-critical flag configurable in Settings
-- Secret detection and SBOM generation toggles
-
-### DORA Metrics & Analytics
-- **Deployment Frequency** — deploys per week from real deployment records
-- **Lead Time** — average successful run duration as pipeline lead time proxy
-- **MTTR** — mean time to resolve from incident `createdAt` to `resolvedAt`
-- **Change Failure Rate** — failed runs / total runs over last 30 days
-- Daily run chart (7 days) with success/failure breakdown
-- Build time trend (7 days average duration)
-- Top failing pipelines by failure rate
-
-### Incident Management
-- Auto-create incidents when pipeline runs fail — no manual action needed
-- Severity inferred from failing stage type: `deploy/scan` → high, `test/build` → medium
-- Link incidents to run, repo, branch, commit, and author
-- Acknowledge and resolve workflows with notes
-- SLA breach timers on every open incident (configurable per severity)
-- Assign to on-call person or custom email
-
-### On-Call & Routing
-- On-call shift scheduler with start/end times and timezone
-- Routing rules: match incidents by severity + category → notify Slack/email/on-call
-- Escalation policies: multi-step escalation with configurable delays
-- Current on-call person surfaced in the Assign modal
-- SLA tiers configurable per severity level
-
-### AI Copilot
-- Ask natural language questions about pipelines, runs, failures, and DORA metrics
-- Powered by Groq (Llama-3.3-70b or configurable model)
-- Contextual answers using live data from your runs, deployments, and incidents
-- Token usage tracking per session
-
-### Team & Access Control
-- Three roles: `admin` (full access), `editor` (trigger pipelines, manage incidents), `viewer` (read-only)
-- Create, edit, deactivate, and delete users from the Team page
-- Last login tracking
-- Passwords stored as scrypt hashes — no plaintext storage
-- Role enforced on every API route
+1. [Understand The System](#understand-the-system)
+2. [Accounts And Permissions](#accounts-and-permissions)
+3. [Architecture](#architecture)
+4. [Server Reference](#server-reference)
+5. [Install Locally](#install-locally)
+6. [Configure Environment](#configure-environment)
+7. [Run VynCICD](#run-vyncicd)
+8. [Production Deployment](#production-deployment)
+9. [Back Up And Restore](#back-up-and-restore)
+10. [Connect A Repository](#connect-a-repository)
+11. [Native Pipelines](#native-pipelines)
+12. [Jenkins CI](#jenkins-ci)
+13. [Jenkins Kubernetes CD](#jenkins-kubernetes-cd)
+14. [Kubernetes And k3d](#kubernetes-and-k3d)
+15. [Container Registry](#container-registry)
+16. [Resource Limits](#resource-limits)
+17. [Settings Guide](#settings-guide)
+18. [Security And Secrets](#security-and-secrets)
+19. [Troubleshooting](#troubleshooting)
+20. [Checklists](#checklists)
+21. [Repository Reference](#repository-reference)
 
 ---
 
-## Quick Start
+## Understand The System
 
-### Prerequisites
+### What VynCICD does
 
-- **Node.js 18+**
-- A running Gitea instance (or GitHub/GitLab/Bitbucket)
-- At least one Kubernetes cluster or target server accessible from VynCICD
+- Connects Gitea, GitHub, GitLab, and Bitbucket repositories.
+- Runs native stages: `run`, `test`, `build`, `scan`, `deploy`, and `notify`.
+- Triggers and tracks Jenkinsfile jobs.
+- Tracks Kubernetes deployments and rollbacks.
+- Runs Trivy image scans, secret scans, and SBOM generation.
+- Sends Slack, Microsoft Teams, custom webhook, and email notifications.
+- Provides AI Copilot with configurable providers.
+- Manages incidents, on-call, routing, escalation, and SLAs.
+- Calculates deployment frequency, lead time, MTTR, and change failure rate.
+- Provides `admin`, `editor`, and `viewer` team roles.
 
-### Install
+### Native versus Jenkinsfile mode
+
+Choose **Native VynCICD stages** when VynCICD should execute the complete run.
+
+Choose **Jenkinsfile via Jenkins** when Jenkins should execute the complete run. VynCICD triggers the Jenkins job and displays its result; it does not interpret Jenkins Groovy.
+
+| Concern | Native mode | Jenkinsfile mode |
+|---|---|---|
+| Pipeline definition | VynCICD UI stages | Jenkinsfile or Jenkins job |
+| Execution engine | VynCICD runner | Jenkins |
+| Build/test/scan commands | VynCICD runner | Jenkins agent |
+| Kubernetes deployment | VynCICD runner | Jenkins agent and `kubectl` |
+| Run visibility | VynCICD | VynCICD plus Jenkins link |
+| Retry/timeout owner | VynCICD | Jenkins |
+| Credentials used during work | VynCICD runner | Jenkins Credentials |
+
+Do not configure both engines to execute the same pipeline. Pick one owner.
+
+---
+
+## Accounts And Permissions
+
+Keep host, application, Jenkins, and Kubernetes identities separate.
+
+### `ubuntu`
+
+Deployment operator account. It may use `sudo` for controlled host administration:
+
+- Copy changed files to the server.
+- Install files into `/home/vyncicd/vyncicd`.
+- Run the VynCICD build as `vyncicd`.
+- Restart and save PM2 as `vyncicd`.
+- Inspect Docker and Kubernetes when required.
+
+### `vyncicd`
+
+Owns and runs VynCICD:
+
+```text
+/home/vyncicd/vyncicd
+```
+
+Run application commands as:
 
 ```bash
-git clone https://github.com/vynops/VynCICD
-cd VynCICD
-cp .env.local.example .env.local
+sudo -u vyncicd -H bash
+cd /home/vyncicd/vyncicd
+```
+
+### `labcicd`
+
+Owns the Jenkins test environment:
+
+```text
+/home/labcicd/jenkins
+```
+
+Jenkins itself runs inside its container as the image-native `jenkins` user. The host Compose project and Jenkins data remain under `labcicd`.
+
+### `root` or `sudo`
+
+Use root-level access only for host and cluster administration:
+
+- Docker networks and containers.
+- k3d cluster operations.
+- Kubernetes namespaces, RBAC, quotas, and rollout repair.
+- Reading protected service-account token files when necessary.
+
+Never give Jenkins `cluster-admin` for the test setup.
+
+---
+
+## Architecture
+
+```text
+User
+  |
+  v
+VynCICD dashboard
+  |\
+  | \-- Native mode --> VynCICD runner --> Docker/Kubernetes
+  |
+  \---- Jenkinsfile mode --> Jenkins --> kubectl/Kubernetes
+                                  |
+                                  \--> Registry and build tools
+```
+
+### Important ports
+
+| Service | Port | Purpose |
+|---|---:|---|
+| VynCICD | `3050` | Dashboard and API |
+| Jenkins | `8080` | Jenkins web/API |
+| Docker Registry | `5050` | Registry API on host |
+| k3d-cicd API | `41815` host / `6443` cluster | Kubernetes API |
+| Gitea | `3300` | Repository web/API |
+
+### Application components
+
+| Path | Purpose |
+|---|---|
+| `src/app/**` | Next.js pages and API routes |
+| `src/lib/settings-store.ts` | Typed settings and JSON persistence |
+| `src/lib/data-store.ts` | Repositories, pipelines, runs, deployments, scans |
+| `src/lib/jenkins.ts` | Jenkins REST client, CSRF, queue/build polling |
+| `src/agent/runner.mjs` | Native pipeline runner |
+| `data/*.json` | Runtime state; treat as production data |
+| `ops/jenkins-cd/` | Jenkins Kubernetes CD setup |
+
+---
+
+## Server Reference
+
+Reference installation:
+
+```text
+Host: ubuntu@92.4.75.193
+VynCICD user: vyncicd
+VynCICD path: /home/vyncicd/vyncicd
+VynCICD PM2 name: vyncicd
+Jenkins user: labcicd
+Jenkins path: /home/labcicd/jenkins
+Jenkins URL: http://92.4.75.193:8080
+VynCICD URL: http://92.4.75.193:3050
+Registry: http://localhost:5050
+k3d cluster: cicd / kubectl context k3d-cicd
+```
+
+Replace these values for another server. Never copy real passwords or tokens into this README.
+
+Connect from Windows PowerShell:
+
+```powershell
+ssh -i "D:\Help\ssh-key-2026-07-18.key" ubuntu@92.4.75.193
+```
+
+The server is production-like. Do not run deployment commands unless deployment was explicitly approved.
+
+---
+
+## Install Locally
+
+Prerequisites:
+
+- Node.js 18 or newer.
+- npm and Git.
+- A repository provider or local Gitea.
+- Optional Docker, kubectl, and Kubernetes for pipeline execution.
+
+```bash
+git clone <repository-url> vyncicd
+cd vyncicd
 npm install
 ```
 
-### Configure
+Create `.env.local` from your environment template:
 
-Edit `.env.local`:
-
-```env
-# Required
-VYNCICD_SECRET=<run: openssl rand -base64 32>
-VYNCICD_ADMIN_EMAIL=admin@vyncicd.local
-VYNCICD_ADMIN_PASSWORD=changeme
-
-# Git providers (configure at least one)
-GITEA_URL=http://your-gitea:3300
-GITEA_TOKEN=your-gitea-token
-GITEA_WEBHOOK_SECRET=your-webhook-secret
-
-# Kubernetes
-K8S_KUBECONFIG=/path/to/kubeconfig.yaml
-
-# Optional
-GROQ_API_KEY=<from console.groq.com>
-SLACK_WEBHOOK_URL=https://hooks.slack.com/services/...
+```bash
+cp .env.local.example .env.local
 ```
 
-### Start
+On Windows PowerShell:
+
+```powershell
+Copy-Item .env.local.example .env.local
+```
+
+Start development:
 
 ```bash
 npm run dev
-# Dashboard: http://localhost:3050
 ```
 
-### Deploy the runner agent
+Open:
 
-The pipeline runner is a separate Node.js process that polls for pending runs and executes stages:
+```text
+http://localhost:3050
+```
+
+Build and run production locally:
 
 ```bash
-# On the server that will run pipelines
+npm run build
+npm run start
+```
+
+### Architecture check
+
+The reference server is ARM64. Always check before using container images:
+
+```bash
+uname -m
+docker info --format '{{.Architecture}}'
+```
+
+An AMD64-only image on an ARM64 node causes:
+
+```text
+exec format error
+```
+
+Build `linux/arm64` on an ARM64 host or publish a multi-architecture image.
+
+---
+
+## Configure Environment
+
+Use strong values. These are placeholders only:
+
+```env
+VYNCICD_SECRET=<long-random-signing-secret>
+VYNCICD_ADMIN_EMAIL=admin@example.com
+VYNCICD_ADMIN_PASSWORD=<unique-admin-password>
+
+GITEA_URL=http://gitea:3000
+GITEA_TOKEN=<gitea-api-token>
+GITEA_WEBHOOK_SECRET=<webhook-secret>
+
+K8S_API_URL=https://127.0.0.1:<live-port>
+K8S_KUBECONFIG=/home/labcicd/kubeconfig/cicd.yaml
+
+REGISTRY_URL=http://localhost:5050
+K8S_REGISTRY_URL=cicd-registry:5000
+
+SLACK_WEBHOOK_URL=<slack-webhook>
+TEAMS_WEBHOOK_URL=<teams-webhook>
+CUSTOM_WEBHOOK_URL=<custom-webhook>
+SMTP_HOST=<smtp-host>
+SMTP_PORT=587
+SMTP_USER=<smtp-user>
+SMTP_PASSWORD=<smtp-password>
+SMTP_FROM=<from-address>
+
+GROQ_API_KEY=<groq-key>
+RUNNER_SECRET=<runner-secret>
+```
+
+Generate a signing secret:
+
+```bash
+openssl rand -base64 32
+```
+
+Never commit `.env.local`, `data/settings.json`, tokens, API keys, Jenkins passwords, or Kubernetes ServiceAccount tokens.
+
+---
+
+## Run VynCICD
+
+### Development
+
+```bash
+npm run dev
+```
+
+### Production with PM2
+
+Run as `vyncicd`:
+
+```bash
+cd /home/vyncicd/vyncicd
+npm install
+npm run build
+pm2 start npm --name vyncicd -- start
+pm2 save
+pm2 list
+```
+
+If it already exists:
+
+```bash
+pm2 restart vyncicd
+pm2 save
+```
+
+Inspect logs and health:
+
+```bash
+pm2 logs vyncicd --lines 100
+curl -I http://127.0.0.1:3050
+```
+
+### Native runner
+
+Native pipelines require the separate runner:
+
+```bash
+cd /home/vyncicd/vyncicd
 node src/agent/runner.mjs
+```
 
-# Or via PM2
+Under PM2:
+
+```bash
 pm2 start src/agent/runner.mjs --name vyncicd-runner
+pm2 save
+pm2 logs vyncicd-runner --lines 100
 ```
 
----
-
-## Pipeline Definition
-
-Pipelines are registered in VynCICD via the UI. Stages are defined per pipeline with the following fields:
-
-| Stage Type | Description | Key Fields |
-|---|---|---|
-| `run` | Execute a shell command | `run` |
-| `test` | Run tests (marks pipeline as failed on exit code != 0) | `run` |
-| `build` | Build Docker image and push to registry | `run` |
-| `scan` | Trivy security scan of the built image | `image` |
-| `deploy` | Apply Kubernetes manifest | `environment`, `clusterName`, `manifest` |
-| `notify` | Send notification (stub, configurable) | — |
-
-### Example pipeline stages
-
-```yaml
-# Stage: test
-type: test
-run: |
-  docker run --rm -v "$(pwd)":/app -w /app golang:1.22-alpine go test ./... -v
-
-# Stage: build
-type: build
-run: |
-  docker build -t ${IMAGE} .
-  docker push ${IMAGE}
-
-# Stage: deploy
-type: deploy
-environment: staging
-clusterName: k3d-cicd    # selects kubectl context
-manifest: |
-  apiVersion: apps/v1
-  kind: Deployment
-  metadata:
-    name: my-service
-    namespace: staging
-  spec:
-    replicas: 1
-    selector:
-      matchLabels:
-        app: my-service
-    template:
-      spec:
-        containers:
-        - name: my-service
-          image: ${K8S_IMAGE}
-```
-
-### Template variables available to runner
-
-| Variable | Value |
-|---|---|
-| `$IMAGE` | `${REGISTRY_URL}/${repoFullName}:${commit}` |
-| `$K8S_IMAGE` | `${K8S_REGISTRY}/${repoFullName}:${commit}` |
-| `$COMMIT` | Git commit SHA |
-| `$DEPLOY_CLUSTER` | Cluster name from environment record |
-| `$DEPLOY_ENV` | Environment name |
-
----
-
-## Environment Variables
-
-| Variable | Description | Required |
-|---|---|---|
-| `VYNCICD_SECRET` | 32-byte random secret for JWT signing | **Yes** |
-| `VYNCICD_ADMIN_EMAIL` | Initial admin email | **Yes** |
-| `VYNCICD_ADMIN_PASSWORD` | Initial admin password (hashed on first login) | **Yes** |
-| `VYNCICD_SECURE_COOKIE` | Set `true` in production (HTTPS) | No |
-| `GITEA_URL` | Gitea instance URL | No |
-| `GITEA_TOKEN` | Gitea API token | No |
-| `GITEA_WEBHOOK_SECRET` | Shared secret for Gitea webhook HMAC | No |
-| `GITHUB_TOKEN` | GitHub PAT with repo scope | No |
-| `GITHUB_WEBHOOK_SECRET` | GitHub webhook secret | No |
-| `GITLAB_TOKEN` | GitLab personal access token | No |
-| `GITLAB_URL` | Self-hosted GitLab URL | No |
-| `K8S_API_URL` | Kubernetes API server URL | No |
-| `K8S_KUBECONFIG` | Path to kubeconfig file | No |
-| `REGISTRY_URL` | Docker registry for `docker push` | No |
-| `K8S_REGISTRY_URL` | Registry accessible inside the cluster | No |
-| `GROQ_API_KEY` | Groq API key for AI Copilot | No |
-| `SLACK_WEBHOOK_URL` | Slack webhook for build notifications | No |
-| `RUNNER_SECRET` | Shared secret between VynCICD and the runner agent | No |
-
----
-
-## Data Storage
-
-VynCICD stores all state as JSON files in `data/`. No database required.
-
-| File | Contents |
-|---|---|
-| `data/repos.json` | Connected repositories |
-| `data/pipelines.json` | Pipeline definitions with stages |
-| `data/runs.json` | Pipeline run history (last 500) |
-| `data/deployments.json` | Deployment records |
-| `data/environments.json` | Deployment target environments |
-| `data/incidents.json` | Incident records |
-| `data/oncall.json` | On-call shifts |
-| `data/routing.json` | Routing rules |
-| `data/policies.json` | Escalation policies |
-| `data/sla.json` | SLA tiers per severity |
-| `data/users.json` | User accounts (scrypt-hashed passwords) |
-| `data/settings.json` | Platform configuration |
-
-> Add `data/` to `.gitignore` — it is already included in the default `.gitignore`.
+The runner is not required for Jenkinsfile pipelines. Jenkins executes those runs.
 
 ---
 
 ## Production Deployment
 
-### PM2
+This procedure deploys only explicitly changed files. Never copy the full project, `node_modules`, `.next`, `.env.local`, or runtime data.
+
+### 1. Check local changes
+
+```powershell
+git status --short
+git diff --name-only
+```
+
+Review every file before transfer.
+
+### 2. Transfer a changed file
+
+```powershell
+$key = "D:\Help\ssh-key-2026-07-18.key"
+scp -i $key src/lib/jenkins.ts ubuntu@92.4.75.193:/tmp/jenkins.ts
+```
+
+### 3. Verify SHA-256
+
+Local:
+
+```powershell
+Get-FileHash src/lib/jenkins.ts -Algorithm SHA256
+```
+
+Server:
 
 ```bash
+sha256sum /tmp/jenkins.ts
+```
+
+Stop if hashes differ.
+
+### 4. Install as `vyncicd`
+
+```bash
+sudo cp /tmp/jenkins.ts /home/vyncicd/vyncicd/src/lib/jenkins.ts
+sudo chown vyncicd:vyncicd /home/vyncicd/vyncicd/src/lib/jenkins.ts
+rm -f /tmp/jenkins.ts
+```
+
+### 5. Build before restart
+
+```bash
+sudo -u vyncicd -H bash
+cd /home/vyncicd/vyncicd
+npm install
 npm run build
-
-# Start the dashboard
-pm2 start npm --name vyncicd -- start
-
-# Start the runner agent
-pm2 start src/agent/runner.mjs --name vyncicd-runner
-
-pm2 save
 ```
 
-### Nginx
+If the build fails, do not restart PM2.
 
-```nginx
-server {
-    listen 443 ssl;
-    server_name cicd.example.com;
-
-    location / {
-        proxy_pass         http://localhost:3050;
-        proxy_http_version 1.1;
-        proxy_set_header   Upgrade $http_upgrade;
-        proxy_set_header   Connection 'upgrade';
-        proxy_set_header   Host $host;
-        proxy_cache_bypass $http_upgrade;
-        proxy_buffering    off;
-        proxy_read_timeout 300s;
-    }
-}
-```
-
----
-
-## API Reference
-
-### Authentication
-
-Dashboard endpoints require a `vyncicd_session` cookie.
-Runner endpoints accept `x-runner-token` header.
-
-### Core Endpoints
-
-| Method | Path | Description |
-|---|---|---|
-| `GET/POST` | `/api/repositories` | List / connect repositories |
-| `PATCH/DELETE` | `/api/repositories/:id` | Update / remove repository |
-| `GET/POST` | `/api/pipelines` | List / create pipelines |
-| `PATCH/DELETE` | `/api/pipelines/:id` | Update / delete pipeline |
-| `POST` | `/api/pipelines/:id/trigger` | Manually trigger a pipeline |
-| `GET` | `/api/runs` | List pipeline runs |
-| `GET` | `/api/runs/:id` | Get run details with deploy env vars |
-| `PATCH` | `/api/runs/:id` | Update run status (runner) |
-| `POST` | `/api/runs/:id/stage` | Report stage completion (runner) |
-| `POST` | `/api/runs/:id/logs` | Push stage logs (runner) |
-| `GET/POST` | `/api/deployments` | List / create deployments |
-| `POST` | `/api/deployments/:id/rollback` | Roll back a deployment |
-| `GET/POST` | `/api/environments` | List / create environments |
-| `GET/POST` | `/api/incidents` | List / create incidents |
-| `PATCH` | `/api/incidents/:id` | Acknowledge, resolve, or assign |
-| `GET/POST` | `/api/oncall` | List / create on-call shifts |
-| `GET/POST` | `/api/routing` | List / create routing rules |
-| `GET/POST` | `/api/routing/policies` | List / create escalation policies |
-| `GET/POST` | `/api/routing/sla` | Get / update SLA tiers |
-| `GET` | `/api/analytics` | DORA metrics and chart data |
-| `GET/POST` | `/api/users` | List / create users |
-| `PATCH/DELETE` | `/api/users/:id` | Update / delete user |
-| `POST` | `/api/auth/login` | Create session |
-| `POST` | `/api/auth/logout` | Destroy session |
-| `GET` | `/api/auth/me` | Current user |
-| `POST` | `/api/auth/change-password` | Change own password |
-| `POST` | `/api/webhooks/gitea` | Gitea push webhook |
-| `POST` | `/api/webhooks/github` | GitHub push webhook |
-| `POST` | `/api/webhooks/gitlab` | GitLab push webhook |
-| `POST` | `/api/webhooks/bitbucket` | Bitbucket push webhook |
-| `POST` | `/api/copilot` | AI Copilot query |
-| `POST` | `/api/settings/test-git` | Test git provider connection |
-| `POST` | `/api/settings/test-k8s` | Test Kubernetes connectivity |
-| `POST` | `/api/settings/test-notification` | Test Slack or SMTP |
-
----
-
-## Project Structure
-
-```
-src/
-├── app/
-│   ├── (dashboard)/
-│   │   ├── overview/          # Fleet health + DORA snapshot
-│   │   ├── pipelines/         # Pipeline CRUD and stage editor
-│   │   ├── runs/              # Run history with live stage logs
-│   │   ├── repositories/      # Repository management
-│   │   ├── deployments/       # Deployment history and rollback
-│   │   ├── environments/      # Deployment target registry
-│   │   ├── security/          # Security scan results
-│   │   ├── analytics/         # DORA charts and build trends
-│   │   ├── incidents/         # Incident management with SLA timers
-│   │   ├── oncall/            # On-call schedule management
-│   │   ├── routing/           # Routing rules and escalation policies
-│   │   ├── copilot/           # AI Copilot chat
-│   │   ├── team/              # User management
-│   │   └── settings/          # Platform configuration
-│   ├── api/                   # All API routes
-│   └── login/
-├── components/
-│   └── layout/                # Sidebar, Header, DashboardLayout
-├── lib/
-│   ├── auth.ts                # JWT session + role enforcement
-│   ├── data-store.ts          # Repositories, pipelines, runs, deployments
-│   ├── oncall-store.ts        # Incidents, on-call, routing, escalation, SLA
-│   ├── settings-store.ts      # Platform settings
-│   ├── user-store.ts          # Users + scrypt auth
-│   ├── notifier.ts            # Slack/email notification delivery
-│   ├── webhook-utils.ts       # Webhook payload → pipeline run creation
-│   └── seed.ts                # Demo data seed
-└── agent/
-    └── runner.mjs             # Standalone pipeline runner process
-```
-
----
-
-## Tech Stack
-
-| Layer | Technology |
-|---|---|
-| Framework | Next.js 16, App Router, React 19 |
-| Language | TypeScript |
-| Styling | Tailwind CSS v4 |
-| Charts | Recharts |
-| Data fetching | SWR |
-| Auth | jose (JWT) + scrypt password hashing |
-| AI | Groq API (Llama-3.3-70b-versatile) |
-| Runner | Node.js 18, Docker CLI, kubectl |
-| Storage | JSON file store (`data/`) — no database |
-
----
-
-## Contributing
-
-Open an issue before submitting a large PR.
+For stale generated output:
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/VynCICD
-cd VynCICD && npm install
-git checkout -b feat/my-feature
-npm run dev
+rm -rf .next
+npm run build
+```
+
+Never delete `data/` during a build repair.
+
+### 6. Restart and verify
+
+```bash
+pm2 restart vyncicd
+pm2 save
+pm2 list
+```
+
+Expected:
+
+```text
+vyncicd  online
 ```
 
 ---
 
-## Part of the VynOps Suite
+## Back Up And Restore
 
-| Product | Purpose | Repo |
+### VynCICD data
+
+```bash
+tar -czf /tmp/vyncicd-data-$(date +%Y%m%d%H%M%S).tar.gz \
+  -C /home/vyncicd/vyncicd data
+```
+
+Move the archive to protected backup storage. Do not leave long-lived backups in `/tmp`.
+
+### Jenkins home
+
+```bash
+tar -czf /tmp/jenkins-home-$(date +%Y%m%d%H%M%S).tar.gz \
+  -C /home/labcicd/jenkins home
+```
+
+Protect this archive: it contains Jenkins configuration, job history, and credential metadata.
+
+### Restore
+
+Stop before restoring:
+
+```bash
+pm2 stop vyncicd
+tar -xzf /path/to/vyncicd-data-backup.tar.gz -C /home/vyncicd/vyncicd
+chown -R vyncicd:vyncicd /home/vyncicd/vyncicd/data
+pm2 start vyncicd
+```
+
+Take a fresh backup before overwriting current state.
+
+---
+
+## Connect A Repository
+
+1. Open **Repositories**.
+2. Click **Add repository**.
+3. Select Gitea, GitHub, GitLab, or Bitbucket.
+4. Enter URL and credentials.
+5. Click **Test connection**.
+6. Save.
+7. Configure the provider webhook using the URL shown by VynCICD.
+8. Push a small commit or manually trigger a pipeline.
+
+For webhook failures:
+
+```bash
+pm2 logs vyncicd --lines 200 | grep -i webhook
+```
+
+External providers need a publicly reachable webhook URL. A localhost URL is only suitable for server-side tests.
+
+---
+
+## Native Pipelines
+
+### Create a native pipeline
+
+1. Open **Pipelines -> New Pipeline**.
+2. Enter name, repository, and branch.
+3. Select **Native VynCICD stages**.
+4. Add at least one stage.
+5. Save.
+6. Click the play button.
+7. Open **Runs** to watch status and logs.
+
+Native pipelines require at least one stage.
+
+### Stage types
+
+| Type | Purpose | Typical fields |
 |---|---|---|
-| **VynOps** | Kubernetes operations platform | [vynops/VynOps](https://github.com/vynops/VynOps) |
-| **VynAI** | Ollama fleet manager and AI gateway | [vynops/VynAI](https://github.com/vynops/VynAI) |
-| **VynCost** | Cloud cost visibility | [vynops/VynCost](https://github.com/vynops/VynCost) |
-| **VynDB** | Database operations | [vynops/VynDB](https://github.com/vynops/VynDB) |
-| **VynDC** | Data center management | [vynops/VynDC](https://github.com/vynops/VynDC) |
-| **VynCICD** | CI/CD pipeline management | [vynops/VynCICD](https://github.com/vynops/VynCICD) |
-| **VynHana** | SAP HANA Database management | [vynops/VynHana](https://github.com/vynops/VynHana) |
-| **VynSAP** | SAP ERP management | [vynops/VynSAP](https://github.com/vynops/VynSAP) |
+| `run` | Shell command | `run` |
+| `test` | Test command | `run` |
+| `build` | Build and push | `run` |
+| `scan` | Trivy image scan | `image` |
+| `deploy` | Apply Kubernetes manifest | `environment`, `clusterName`, `manifest` |
+| `notify` | Notification step | channel configuration |
+
+### Template variables
+
+| Variable | Meaning |
+|---|---|
+| `${IMAGE}` | Host registry image reference |
+| `${K8S_IMAGE}` | Image reference visible from Kubernetes |
+| `${COMMIT}` | Commit identifier |
+| `${DEPLOY_ENV}` | Deployment environment |
+| `${DEPLOY_CLUSTER}` | Selected cluster |
+
+Example deploy manifest:
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-service
+  namespace: staging
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: my-service
+  template:
+    metadata:
+      labels:
+        app: my-service
+    spec:
+      containers:
+        - name: my-service
+          image: ${K8S_IMAGE}
+```
 
 ---
 
-## License
+## Jenkins CI
 
-MIT — see [LICENSE](LICENSE).
+### Minimal Jenkins installation
+
+Reference setup:
+
+```text
+Host account: labcicd
+Directory: /home/labcicd/jenkins
+Container: labcicd-jenkins
+Web: http://92.4.75.193:8080
+CPU limit: 0.25 CPU
+Memory limit: 768 MiB
+Swap ceiling: 768 MiB
+Process limit: 256
+```
+
+Jenkins runs as the image-native `jenkins` user. Do not force `user: "1008:1008"`; that causes `whoami: cannot find name for user ID` errors.
+
+### First setup
+
+1. Open `http://<server>:8080`.
+2. Retrieve the one-time password:
+
+   ```bash
+   sudo cat /home/labcicd/jenkins/home/secrets/initialAdminPassword
+   ```
+
+3. Choose **Install suggested plugins**.
+4. Create a non-default admin user such as `cicd`.
+5. Generate a Jenkins API token from the user security page.
+6. Use the API token for VynCICD, not the setup password.
+
+### Configure Jenkins in VynCICD
+
+Open **Settings -> Pipeline -> Jenkins**:
+
+```text
+Jenkins URL: http://127.0.0.1:8080
+Jenkins Username: cicd
+Jenkins API Token: <generated API token>
+```
+
+Click **Test connection**. Expected:
+
+```text
+Connected to Jenkins · <version>
+```
+
+The token should show as `***configured***`.
+
+### Create a Jenkinsfile pipeline
+
+1. Open **Pipelines -> New Pipeline**.
+2. Enter name, repository, and branch.
+3. Select **Jenkinsfile via Jenkins**.
+4. Enter the exact Jenkins job name.
+5. Enter `Jenkinsfile` or the real repository path.
+6. Leave optional parameters empty unless the Jenkins job defines them.
+7. Create and click play.
+
+Unparameterized jobs use Jenkins `/build`. Parameterized jobs use `/buildWithParameters` only when explicit parameters exist.
+
+### Jenkins lifecycle
+
+```text
+VynCICD creates run
+  -> Jenkins queue
+  -> Jenkins build starts
+  -> Jenkins executes Jenkinsfile
+  -> VynCICD polls queue/build
+  -> VynCICD stores status, duration, console, and build URL
+```
+
+### Jenkins 403
+
+Check:
+
+- API token is valid.
+- User has `Overall -> Read`.
+- Job has `Job -> Read`, `Job -> Build`, and `Job -> Cancel`.
+- The configured username is correct.
+- The job name matches exactly.
+- CSRF crumb header and session cookie are preserved.
+
+### Jenkins 400 not parameterized
+
+If Jenkins says:
+
+```text
+<job> is not parameterized
+```
+
+Remove VynCICD optional parameters or define matching Jenkins parameters. Repository and branch metadata are not automatically sent as Jenkins parameters.
 
 ---
+
+## Jenkins Kubernetes CD
+
+The reusable CD assets are in:
+
+```text
+ops/jenkins-cd/
+```
+
+They include:
+
+- ARM64 Jenkins image with `kubectl v1.31.5`.
+- Compose network attachment to `k3d-cicd`.
+- `jenkins-cd-test` namespace RBAC.
+- Safe nginx deployment and rollout Jenkinsfile.
+- Setup instructions.
+
+### CD ownership
+
+```text
+Root/admin:
+  creates namespace, RBAC, quota, and token
+
+labcicd:
+  owns Jenkins files and container lifecycle
+
+jenkins user:
+  executes Jenkinsfile commands
+
+Kubernetes:
+  authorizes only the ServiceAccount token
+```
+
+### Namespace and ServiceAccount
+
+```text
+Namespace: jenkins-cd-test
+ServiceAccount: jenkins-deployer
+Credential ID: k8s-cd-test-token
+```
+
+The ServiceAccount can manage permitted resources in `jenkins-cd-test` and must not deploy to `production`.
+
+Verify with a live kubeconfig:
+
+```bash
+k3d kubeconfig get cicd > /tmp/cicd-live.yaml
+kubectl --kubeconfig /tmp/cicd-live.yaml auth can-i create deployments \
+  --as=system:serviceaccount:jenkins-cd-test:jenkins-deployer \
+  -n jenkins-cd-test
+kubectl --kubeconfig /tmp/cicd-live.yaml auth can-i create deployments \
+  --as=system:serviceaccount:jenkins-cd-test:jenkins-deployer \
+  -n production
+rm -f /tmp/cicd-live.yaml
+```
+
+Expected:
+
+```text
+yes
+no
+```
+
+### Add the token to Jenkins
+
+Retrieve it only on the server terminal:
+
+```bash
+sudo cat /home/labcicd/jenkins/k8s-cd-test-token
+```
+
+In Jenkins:
+
+```text
+Manage Jenkins -> Credentials -> System -> Global credentials -> Add Credentials
+Kind: Secret text
+ID: k8s-cd-test-token
+Secret: complete token value
+```
+
+Do not put the token in Git, a Jenkinsfile, VynCICD settings, README, or chat.
+
+### CD test pipeline
+
+Use [ops/jenkins-cd/Jenkinsfile](ops/jenkins-cd/Jenkinsfile). It:
+
+1. Checks Kubernetes access.
+2. Creates or updates `nginx:1.27`.
+3. Waits for rollout completion.
+
+Jenkins reaches the k3d API through:
+
+```text
+https://k3d-cicd-serverlb:6443
+```
+
+The test uses `--insecure-skip-tls-verify=true` only for the isolated lab cluster. Use a trusted CA certificate outside this lab.
+
+Verify from the server:
+
+```bash
+kubectl get deployment jenkins-cd-test \
+  -n jenkins-cd-test --context k3d-cicd
+kubectl get pods \
+  -n jenkins-cd-test --context k3d-cicd
+```
+
+Expected:
+
+```text
+jenkins-cd-test   1/1   Running
+```
+
+### CD quota
+
+The test namespace is limited by ResourceQuota and LimitRange:
+
+```text
+CPU requests:     500m
+CPU limits:       1 CPU
+Memory requests:  512Mi
+Memory limits:    1Gi
+Pods:             5
+Services:         3
+Storage requests: 2Gi
+```
+
+Inspect:
+
+```bash
+kubectl get resourcequota -n jenkins-cd-test --context k3d-cicd
+kubectl get limitrange -n jenkins-cd-test --context k3d-cicd
+kubectl describe resourcequota jenkins-cd-test-quota \
+  -n jenkins-cd-test --context k3d-cicd
+```
+
+Jenkins must not be allowed to edit these controls.
+
+---
+
+## Kubernetes And k3d
+
+### Identify the cluster
+
+```bash
+k3d cluster list
+kubectl get ns --context k3d-cicd
+kubectl get pods -A --context k3d-cicd
+```
+
+If the context is missing, create a live temporary kubeconfig:
+
+```bash
+k3d kubeconfig get cicd > /tmp/cicd-live.yaml
+kubectl --kubeconfig /tmp/cicd-live.yaml get ns
+rm -f /tmp/cicd-live.yaml
+```
+
+Do not trust a stale kubeconfig pointing to an old `0.0.0.0` port.
+
+### Workload diagnosis
+
+```bash
+kubectl get deployment <name> -n <namespace> --context k3d-cicd
+kubectl get pods -n <namespace> --context k3d-cicd
+kubectl describe pod <pod> -n <namespace> --context k3d-cicd
+kubectl logs <pod> -n <namespace> --context k3d-cicd
+```
+
+For a CrashLoopBackOff:
+
+```bash
+kubectl logs <pod> -n <namespace> --previous --context k3d-cicd
+kubectl describe pod <pod> -n <namespace> --context k3d-cicd
+```
+
+For `exec format error`:
+
+```bash
+uname -m
+docker image inspect <image> --format '{{.Architecture}}/{{.Os}}'
+```
+
+An ARM64 node cannot execute an AMD64-only image. Rebuild for ARM64 or publish a multi-architecture image.
+
+### Safe rollout
+
+```bash
+kubectl set image deployment/<name> <container>=<image> \
+  -n <namespace> --context k3d-cicd
+kubectl rollout status deployment/<name> \
+  -n <namespace> --timeout=180s --context k3d-cicd
+```
+
+Never delete a working deployment before verifying the replacement image.
+
+---
+
+## Container Registry
+
+Reference registry:
+
+```text
+Container: cicd-registry
+Host port: 5050
+Container port: 5000
+URL: http://localhost:5050
+```
+
+Health check:
+
+```bash
+curl -i --max-time 10 http://localhost:5050/v2/
+```
+
+Interpretation:
+
+- `200 OK`: reachable and open.
+- `401 Unauthorized`: reachable but authentication is required.
+- `403 Forbidden`: reachable but access denied.
+- Refused/timeout: service or URL problem.
+
+Container check:
+
+```bash
+sudo docker ps --filter name=cicd-registry
+sudo docker logs --tail 100 cicd-registry
+```
+
+The host-side runner commonly uses `localhost:5050`. Kubernetes pods commonly use `cicd-registry:5000`. Do not use host `localhost` from inside a pod.
+
+---
+
+## Resource Limits
+
+Hard limits protect the host. Limits are ceilings, not reservations.
+
+Inspect database limits:
+
+```bash
+for c in labdb-pg-primary labdb-pg-replica labdb-mysql labdb-redis \
+  labdb-mongodb labdb-couchbase labdb-sqlserver
+do
+  docker inspect --format \
+    "$c: memory={{.HostConfig.Memory}} memorySwap={{.HostConfig.MemorySwap}} nanoCPUs={{.HostConfig.NanoCpus}} pids={{.HostConfig.PidsLimit}}" \
+    "$c"
+done
+```
+
+Interpretation:
+
+- `memory=0`: no memory limit.
+- `nanoCPUs=0`: no CPU limit.
+- `mem_reservation`: reservation, not a hard ceiling.
+- `memswap_limit` equal to `mem_limit`: no additional swap headroom.
+
+Live usage:
+
+```bash
+docker stats --no-stream
+```
+
+Kubernetes ResourceQuota limits aggregate namespace usage. LimitRange supplies defaults and per-container maximums. Neither pre-allocates the full amount.
+
+---
+
+## Settings Guide
+
+Open **Settings**. Save settings before testing saved values.
+
+### Kubernetes and registry
+
+- API URL must be reachable from the VynCICD server.
+- Kubeconfig must be readable by the VynCICD process.
+- ServiceAccount tokens display as `***configured***`.
+- Registry tests run server-side.
+
+### Pipeline
+
+- Retry count, timeout, and concurrency affect native runner behavior.
+- Jenkins URL, username, and API token configure Jenkins REST access.
+- Jenkins tokens are masked.
+
+### Security Scans
+
+- Trivy image scanning.
+- Secret detection.
+- SBOM generation.
+- Critical vulnerability blocking.
+
+### Notifications
+
+Channels can be independently enabled or disabled:
+
+- Slack.
+- Microsoft Teams.
+- Custom webhook.
+- SMTP email.
+
+### AI Copilot
+
+Supported provider modes include Groq, OpenAI, Anthropic, Google, and custom OpenAI-compatible endpoints. Keys are masked as `***configured***`.
+
+### DORA Targets
+
+Targets are used by analytics and overview comparisons:
+
+- Deployment frequency.
+- Lead time.
+- MTTR.
+- Change failure rate.
+
+---
+
+## Security And Secrets
+
+Never expose:
+
+- VynCICD signing secret.
+- Admin password.
+- Jenkins API token.
+- Kubernetes ServiceAccount token.
+- Git provider token.
+- Registry password.
+- SMTP password.
+- AI API key.
+
+Check presence without printing values:
+
+```bash
+test -s /home/labcicd/jenkins/k8s-cd-test-token && echo token-present
+python3 - <<'PY'
+import json
+p='/home/vyncicd/vyncicd/data/settings.json'
+s=json.load(open(p))
+for key in ('k8sToken','jenkinsApiToken','registryPassword'):
+    print(key + '_present=' + str(bool(str(s.get(key,'' )).strip())).lower())
+PY
+```
+
+Jenkins baseline:
+
+- Use a non-default admin username.
+- Disable anonymous read/build permissions.
+- Use API tokens for integrations.
+- Grant only `Overall -> Read` and required job permissions.
+- Do not expose Jenkins agent port `50000` unless needed.
+- Do not mount `/var/run/docker.sock` unless Docker builds are required.
+- Use namespace-scoped Kubernetes RBAC.
+- Use HTTPS and a trusted CA outside the lab.
+
+---
+
+## Troubleshooting
+
+### VynCICD does not start
+
+```bash
+pm2 status
+pm2 logs vyncicd --lines 200
+cd /home/vyncicd/vyncicd
+npm run build
+```
+
+If build fails, do not restart.
+
+### Jenkins connection fails
+
+```bash
+curl -i http://127.0.0.1:8080/api/json
+docker ps --filter name=labcicd-jenkins
+docker logs --tail 100 labcicd-jenkins
+```
+
+Use the API token, not the one-time setup password.
+
+### Jenkins 403
+
+Check API token validity, job permissions, `Overall -> Read`, `Job -> Read`, `Job -> Build`, `Job -> Cancel`, and CSRF crumb/session handling.
+
+### Jenkins 400 not parameterized
+
+Remove VynCICD optional parameters or define matching Jenkins job parameters. An unparameterized job must use `/build`.
+
+### Jenkins run remains pending
+
+```bash
+python3 - <<'PY'
+import json
+runs=json.load(open('/home/vyncicd/vyncicd/data/runs.json'))
+for r in runs[:20]:
+    if r.get('executionMode') == 'jenkinsfile':
+        print({k:r.get(k) for k in ('id','status','jenkinsQueueUrl','jenkinsBuildNumber','jenkinsBuildUrl','error')})
+PY
+```
+
+If Jenkins has completed but the pipeline card is pending, refresh/expand the run so polling synchronizes both records.
+
+### Kubernetes context missing
+
+```bash
+k3d kubeconfig get cicd > /tmp/cicd-live.yaml
+kubectl --kubeconfig /tmp/cicd-live.yaml get ns
+rm -f /tmp/cicd-live.yaml
+```
+
+### Kubernetes 401
+
+The API is reachable but the token is invalid or lacks permission:
+
+```bash
+kubectl auth can-i get pods \
+  --as=system:serviceaccount:<namespace>:<serviceaccount> \
+  -n <namespace>
+```
+
+### Kubernetes CrashLoopBackOff
+
+```bash
+kubectl logs <pod> -n <namespace> --previous --context k3d-cicd
+kubectl describe pod <pod> -n <namespace> --context k3d-cicd
+```
+
+### Kubernetes `exec format error`
+
+Compare `uname -m` with the image architecture. Rebuild the image for the node architecture.
+
+### Registry unavailable
+
+```bash
+curl -i http://localhost:5050/v2/
+docker ps --filter name=cicd-registry
+docker logs --tail 100 cicd-registry
+```
+
+### Docker health check failures
+
+```bash
+docker inspect --format '{{json .Config.Healthcheck}}' <container>
+docker inspect --format '{{range .State.Health.Log}}{{.Output}}{{"\n"}}{{end}}' <container>
+```
+
+A SQL Edge image without `sqlcmd` needs a valid alternative readiness probe, such as a TCP listener check. An authenticated Couchbase endpoint needs an authenticated health probe or public readiness endpoint.
+
+---
+
+## Checklists
+
+### Before production changes
+
+- [ ] Explicit deployment approval exists.
+- [ ] `git status` and `git diff --name-only` reviewed.
+- [ ] Only intended files selected.
+- [ ] Runtime data backed up when needed.
+- [ ] Changed files transferred individually.
+- [ ] SHA-256 hashes match.
+- [ ] Build run as `vyncicd`.
+- [ ] PM2 not restarted after a failed build.
+- [ ] PM2 online after restart.
+- [ ] Relevant API and UI verified.
+
+### Before Jenkins CD
+
+- [ ] Jenkins has ARM64-compatible `kubectl`.
+- [ ] Jenkins reaches `k3d-cicd-serverlb:6443`.
+- [ ] Test namespace exists.
+- [ ] ServiceAccount has only required permissions.
+- [ ] Test token returns `yes` in test namespace and `no` in production.
+- [ ] ResourceQuota and LimitRange exist.
+- [ ] Token is stored as Jenkins Secret text.
+- [ ] Token is not in Git, logs, or Jenkinsfile.
+- [ ] Test deployment uses a harmless image.
+- [ ] Rollout verification is present.
+
+### After a Jenkins CD run
+
+- [ ] Jenkins build succeeds.
+- [ ] VynCICD shows build number and URL.
+- [ ] VynCICD run status is success.
+- [ ] Duration is recorded.
+- [ ] Deployment is Available.
+- [ ] Pod is `1/1 Running`.
+- [ ] No unexpected restarts.
+- [ ] Quota remains within limits.
+
+---
+
+## Repository Reference
+
+| Path | Purpose |
+|---|---|
+| `src/app/(dashboard)/pipelines/page.tsx` | Native/Jenkinsfile pipeline UI |
+| `src/app/(dashboard)/runs/page.tsx` | Run status, duration, Jenkins link |
+| `src/app/(dashboard)/settings/page.tsx` | Platform and Jenkins settings |
+| `src/app/api/pipelines/route.ts` | Pipeline creation and validation |
+| `src/app/api/pipelines/[id]/trigger/route.ts` | Native/Jenkins dispatch |
+| `src/app/api/runs/[id]/jenkins/route.ts` | Jenkins queue/build polling |
+| `src/app/api/settings/test-jenkins/route.ts` | Jenkins connection test |
+| `src/lib/jenkins.ts` | Jenkins REST client |
+| `src/lib/settings-store.ts` | Typed settings and secret masking |
+| `src/lib/data-store.ts` | JSON state models and persistence |
+| `src/agent/runner.mjs` | Native execution |
+| `ops/jenkins-cd/` | Kubernetes CD setup |
+
+Runtime state lives in:
+
+```text
+data/repos.json
+data/pipelines.json
+data/runs.json
+data/deployments.json
+data/environments.json
+data/incidents.json
+data/oncall.json
+data/settings.json
+data/users.json
+```
+
+Treat `data/` as state, not source code. Back it up before repair.
+
+Validation commands:
+
+```bash
+node --check src/agent/runner.mjs
+npm run build
+```
+
+The production build is the authoritative compile/type validation. The existing Next.js middleware deprecation warning is non-fatal.
+
+---
+
+## Final Mental Model
+
+```text
+User
+  |
+  v
+VynCICD dashboard
+  |\
+  | \-- Native mode --> VynCICD runner --> Docker/Kubernetes
+  |
+  \---- Jenkinsfile mode --> Jenkins --> kubectl/Kubernetes
+                                  |
+                                  \--> Registry and build tools
+```
+
+Operating principles:
+
+1. Keep execution ownership clear: native or Jenkins, never both.
+2. Keep host identities separate: `ubuntu`, `vyncicd`, `labcicd`, and `jenkins`.
+3. Use least-privilege Kubernetes ServiceAccounts.
+4. Use hard resource limits for test environments.
+5. Build images for the actual node architecture.
+6. Never expose secrets in source, logs, screenshots, or chat.
+7. Build before restart and verify the live result after every change.
+8. Test CD in a dedicated namespace before considering production.
