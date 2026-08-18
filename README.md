@@ -2,6 +2,14 @@
 
 **A self-hosted CI/CD control plane for native pipelines, Jenkinsfile execution, Kubernetes delivery, security scanning, notifications, AI triage, and DORA metrics.**
 
+Connect your repositories, define pipelines in YAML, deploy to Kubernetes, and let the AI explain every failure — all in a single open-source platform you own and run.
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=nextdotjs)](https://nextjs.org)
+[![Node.js](https://img.shields.io/badge/Node.js-18%2B-green?logo=nodedotjs)](https://nodejs.org)
+[![GitHub](https://img.shields.io/badge/GitHub-vynops%2FVynCICD-181717?logo=github)](https://github.com/vynops/VynCICD)
+[![Part of VynOps Suite](https://img.shields.io/badge/VynOps-Suite-06b6d4)](https://github.com/vynops)
+
 VynCICD gives teams one place to connect repositories, define or trigger pipelines, inspect runs, track deployments, manage incidents, and compare engineering performance.
 
 ```text
