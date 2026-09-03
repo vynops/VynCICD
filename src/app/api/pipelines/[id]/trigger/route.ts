@@ -3,6 +3,7 @@ import { requireRole } from '@/lib/auth'
 import { loadPipelines, savePipelines, loadRepos, addRun, updateRun, type StageRun } from '@/lib/data-store'
 import { getSettings } from '@/lib/settings-store'
 import { triggerJenkinsJob } from '@/lib/jenkins'
+import { syncArgoApplication } from '@/lib/argocd'
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireRole(req, 'editor')
@@ -51,7 +52,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     stages: stageRuns,
     startedAt: now,
     executionMode: pipeline.executionMode ?? 'native',
+    ...(pipeline.executionMode === 'argocd' ? { argoCdApplication: pipeline.argoCdApplication } : {}),
   })
+
+  if (pipeline.executionMode === 'argocd') {
+    updateRun(run.id, {
+      argoCdApplication: pipeline.argoCdApplication,
+      argoCdUrl: settings.argoCdUrl,
+    })
+  }
 
   if (pipeline.executionMode === 'jenkinsfile') {
     try {
@@ -59,6 +68,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       updateRun(run.id, { jenkinsQueueUrl: queueUrl })
     } catch (error) {
       updateRun(run.id, { status: 'failed', error: error instanceof Error ? error.message : 'Jenkins trigger failed.' })
+    }
+  }
+
+  if (pipeline.executionMode === 'argocd') {
+    try {
+      await syncArgoApplication(pipeline.argoCdApplication!, pipeline.argoCdProject)
+      updateRun(run.id, {
+        status: 'running',
+        argoCdApplication: pipeline.argoCdApplication,
+        argoCdUrl: settings.argoCdUrl,
+      })
+    } catch (error) {
+      updateRun(run.id, { status: 'failed', error: error instanceof Error ? error.message : 'Argo CD sync failed.' })
     }
   }
 

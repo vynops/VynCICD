@@ -6,7 +6,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const auth = await requireRole(req, 'admin')
   if (auth instanceof NextResponse) return auth
   const { id } = await params
-  const body = await req.json() as { name?: string; role?: 'admin' | 'editor' | 'viewer'; password?: string }
+  const body = await req.json() as { name?: string; role?: 'admin' | 'editor' | 'viewer'; password?: string; active?: boolean }
+  if (id === auth.id && body.active === false) return NextResponse.json({ error: 'You cannot deactivate your own account.' }, { status: 400 })
   try {
     const user = updateUser(id, body)
     return NextResponse.json({ ...user, passwordHash: undefined, passwordSalt: undefined })

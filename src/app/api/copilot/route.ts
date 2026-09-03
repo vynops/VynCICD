@@ -6,6 +6,8 @@ import { loadRuns, loadDeployments, loadScans } from '@/lib/data-store'
 import { loadIncidents } from '@/lib/oncall-store'
 
 type ChatMsg = { role: 'user' | 'assistant'; content: string }
+const GROQ_DEFAULT_MODEL = 'openai/gpt-oss-120b'
+const RETIRED_GROQ_MODELS = new Set(['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768', 'gemma2-9b-it'])
 
 function buildSystemPrompt(): string {
   const runs        = loadRuns().slice(0, 20)
@@ -44,7 +46,10 @@ export async function POST(req: NextRequest) {
   const apiKey = provider === 'groq'
     ? (settings.groqApiKey || settings.aiApiKey || process.env.GROQ_API_KEY)
     : settings.aiApiKey
-  const model = settings.aiModel || (provider === 'groq' ? 'llama-3.3-70b-versatile' : 'gpt-4o-mini')
+  const configuredModel = settings.aiModel?.trim()
+  const model = provider === 'groq' && (!configuredModel || RETIRED_GROQ_MODELS.has(configuredModel))
+    ? GROQ_DEFAULT_MODEL
+    : configuredModel || 'gpt-4o-mini'
 
   if (!apiKey) {
     return NextResponse.json({ answer: `AI Copilot requires an API key for ${provider}. Configure it in Settings -> AI Copilot.` })

@@ -81,6 +81,14 @@ function RunDetail({ run }: { run: PipelineRun }) {
           {run.jenkinsBuildUrl && <a href={run.jenkinsBuildUrl} target="_blank" rel="noreferrer" className="ml-2 underline hover:text-white">Open Jenkins</a>}
         </div>
       )}
+      {run.executionMode === 'argocd' && (
+        <div className="mb-4 p-3 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-xs text-cyan-300">
+          Argo CD application: <span className="font-mono">{run.argoCdApplication}</span>
+          <span className="ml-3">Sync: {run.argoCdSyncStatus ?? 'Pending'}</span>
+          <span className="ml-3">Health: {run.argoCdHealthStatus ?? 'Pending'}</span>
+          {run.argoCdUrl && <a href={run.argoCdUrl} target="_blank" rel="noreferrer" className="ml-3 underline hover:text-white">Open Argo CD</a>}
+        </div>
+      )}
       {run.aiTriage && (
         <div className="mb-4 p-3 rounded-lg bg-violet-500/10 border border-violet-500/20">
           <div className="text-[10px] font-bold text-violet-400 uppercase tracking-wider mb-1">🤖 AI Triage</div>
@@ -102,13 +110,19 @@ export default function RunsPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null)
 
   useEffect(() => {
-    const run = runs.find(item => item.id === expandedId)
-    if (!run || run.executionMode !== 'jenkinsfile' || run.status === 'success' || run.status === 'failed' || run.status === 'cancelled') return
-    const poll = () => fetch(`/api/runs/${run.id}/jenkins`).then(() => mutate()).catch(() => {})
+    const activeRuns = runs.filter(item =>
+      ['jenkinsfile', 'argocd'].includes(item.executionMode ?? '')
+      && !['success', 'failed', 'cancelled'].includes(item.status)
+    )
+    if (activeRuns.length === 0) return
+    const poll = () => Promise.all(activeRuns.map(run => {
+      const endpoint = run.executionMode === 'argocd' ? 'argocd' : 'jenkins'
+      return fetch(`/api/runs/${run.id}/${endpoint}`)
+    })).then(() => mutate()).catch(() => {})
     poll()
     const timer = window.setInterval(poll, 5000)
     return () => window.clearInterval(timer)
-  }, [expandedId, runs, mutate])
+  }, [runs, mutate])
 
   const filtered = runs.filter(r => {
     const matchStatus = statusFilter === 'all' || r.status === statusFilter

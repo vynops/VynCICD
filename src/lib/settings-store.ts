@@ -64,6 +64,9 @@ export interface AppSettings {
   jenkinsUrl: string
   jenkinsUsername: string
   jenkinsApiToken: string
+  // Argo CD integration
+  argoCdUrl: string
+  argoCdToken: string
   // DORA / analytics
   deploymentFrequencyTarget: number   // deploys/week
   leadTimeTargetHours: number
@@ -124,10 +127,12 @@ const DEFAULTS: AppSettings = {
   aiApiKey: process.env.GROQ_API_KEY ?? '',
   aiBaseUrl: '',
   groqApiKey: process.env.GROQ_API_KEY ?? '',
-  aiModel: 'llama-3.3-70b-versatile',
+  aiModel: 'openai/gpt-oss-120b',
   jenkinsUrl: process.env.JENKINS_URL ?? '',
   jenkinsUsername: process.env.JENKINS_USERNAME ?? '',
   jenkinsApiToken: process.env.JENKINS_API_TOKEN ?? '',
+  argoCdUrl: process.env.ARGOCD_URL ?? '',
+  argoCdToken: process.env.ARGOCD_TOKEN ?? '',
   deploymentFrequencyTarget: 5,
   leadTimeTargetHours: 24,
   mttrTargetMinutes: 60,
@@ -165,6 +170,8 @@ export function getSettings(): AppSettings {
   try {
     const raw = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8')) as Partial<AppSettings>
     const merged: AppSettings = { ...DEFAULTS, ...raw }
+    const retiredGroqModels = new Set(['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768', 'gemma2-9b-it'])
+    if (merged.aiProvider === 'groq' && retiredGroqModels.has(merged.aiModel)) merged.aiModel = DEFAULTS.aiModel
     // For env-seeded fields: if saved value is empty, fall back to env default
     for (const key of ENV_SEEDED) {
       if (!merged[key] && DEFAULTS[key]) (merged as unknown as Record<string, unknown>)[key] = DEFAULTS[key]

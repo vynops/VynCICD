@@ -1,6 +1,7 @@
 import { SignJWT, jwtVerify } from 'jose'
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
+import { findUserById } from '@/lib/user-store'
 
 export interface SessionPayload {
   id: string
@@ -44,13 +45,15 @@ export async function getSession(): Promise<SessionPayload | null> {
   const cookieStore = await cookies()
   const token = cookieStore.get(sessionCookieName())?.value
   if (!token) return null
-  return verifySession(token)
+  const session = await verifySession(token)
+  return session && findUserById(session.id)?.active ? session : null
 }
 
 export async function getSessionFromRequest(req: NextRequest): Promise<SessionPayload | null> {
   const token = req.cookies.get(sessionCookieName())?.value
   if (!token) return null
-  return verifySession(token)
+  const session = await verifySession(token)
+  return session && findUserById(session.id)?.active ? session : null
 }
 
 export function hasRole(session: SessionPayload, minimum: 'viewer' | 'editor' | 'admin'): boolean {

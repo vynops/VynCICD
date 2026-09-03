@@ -14,6 +14,7 @@ export async function POST(req: NextRequest) {
   if (!user || !verifyPassword(password, user.passwordHash, user.passwordSalt)) {
     return NextResponse.json({ error: 'Invalid credentials.' }, { status: 401 })
   }
+  if (!user.active) return NextResponse.json({ error: 'This account has been deactivated.' }, { status: 403 })
   const token = await createSession({ id: user.id, email: user.email, name: user.name, role: user.role })
   const res = NextResponse.json({ ok: true })
   res.cookies.set(sessionCookieName(), token, { httpOnly: true, sameSite: 'lax', path: '/', maxAge: 7 * 86400 })

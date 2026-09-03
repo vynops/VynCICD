@@ -14,16 +14,19 @@ export async function POST(req: NextRequest) {
   if (auth instanceof NextResponse) return auth
 
   const body = await req.json()
-  const { name, repoId, branch, triggerOn, stages, environments, executionMode, jenkinsJob, jenkinsfilePath, jenkinsParameters } = body
+  const { name, repoId, branch, triggerOn, stages, environments, executionMode, jenkinsJob, jenkinsfilePath, jenkinsParameters, argoCdApplication, argoCdProject } = body
 
   if (!name || !repoId || !branch) {
     return NextResponse.json({ error: 'name, repoId, and branch are required' }, { status: 400 })
   }
-  if (executionMode !== 'jenkinsfile' && !stages?.length) {
+  if (executionMode === 'native' && !stages?.length) {
     return NextResponse.json({ error: 'native pipelines require at least one stage' }, { status: 400 })
   }
   if (executionMode === 'jenkinsfile' && !jenkinsJob) {
     return NextResponse.json({ error: 'jenkinsJob is required for Jenkinsfile pipelines' }, { status: 400 })
+  }
+  if (executionMode === 'argocd' && !argoCdApplication) {
+    return NextResponse.json({ error: 'argoCdApplication is required for Argo CD pipelines' }, { status: 400 })
   }
 
   const repo = loadRepos().find(r => r.id === repoId)
@@ -35,7 +38,7 @@ export async function POST(req: NextRequest) {
     name,
     repoId,
     repoFullName: repo.fullName,
-    executionMode: executionMode === 'jenkinsfile' ? 'jenkinsfile' : 'native',
+    executionMode: executionMode === 'jenkinsfile' || executionMode === 'argocd' ? executionMode : 'native',
     branch,
     triggerOn: triggerOn ?? ['push'],
     stages,
@@ -44,6 +47,7 @@ export async function POST(req: NextRequest) {
     createdAt: now,
     updatedAt: now,
     ...(executionMode === 'jenkinsfile' ? { jenkinsJob, jenkinsfilePath: jenkinsfilePath || 'Jenkinsfile', jenkinsParameters: jenkinsParameters ?? {} } : {}),
+    ...(executionMode === 'argocd' ? { argoCdApplication, argoCdProject: argoCdProject || '' } : {}),
   }
 
   const pipelines = loadPipelines()

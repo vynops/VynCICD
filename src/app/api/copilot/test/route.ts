@@ -8,6 +8,8 @@ interface TestResponse {
 }
 
 const CONFIGURED_MASK = '***configured***'
+const GROQ_DEFAULT_MODEL = 'openai/gpt-oss-120b'
+const RETIRED_GROQ_MODELS = new Set(['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768', 'gemma2-9b-it'])
 
 export async function POST(req: NextRequest) {
   const auth = await requireRole(req, 'admin')
@@ -23,7 +25,10 @@ export async function POST(req: NextRequest) {
 
     const settings = getSettings()
     const provider = body.provider ?? settings.aiProvider ?? 'groq'
-    const model = body.model ?? settings.aiModel ?? 'llama-3.3-70b-versatile'
+    const requestedModel = body.model ?? settings.aiModel
+    const model = provider === 'groq' && (!requestedModel || RETIRED_GROQ_MODELS.has(requestedModel))
+      ? GROQ_DEFAULT_MODEL
+      : requestedModel ?? 'gpt-4o-mini'
     const requestedApiKey = (body.apiKey || '').trim()
     const apiKey = (requestedApiKey && requestedApiKey !== CONFIGURED_MASK)
       ? requestedApiKey

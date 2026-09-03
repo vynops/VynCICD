@@ -54,7 +54,7 @@ export interface PipelineStage {
 }
 
 export interface Pipeline {
-  executionMode?: 'native' | 'jenkinsfile'
+  executionMode?: 'native' | 'jenkinsfile' | 'argocd'
   id: string
   name: string
   repoId: string
@@ -73,6 +73,8 @@ export interface Pipeline {
   jenkinsJob?: string
   jenkinsfilePath?: string
   jenkinsParameters?: Record<string, string>
+  argoCdApplication?: string
+  argoCdProject?: string
   _demo?: boolean
 }
 
@@ -117,10 +119,14 @@ export interface PipelineRun {
   durationMs?: number
   environment?: string
   error?: string
-  executionMode?: 'native' | 'jenkinsfile'
+  executionMode?: 'native' | 'jenkinsfile' | 'argocd'
   jenkinsQueueUrl?: string
   jenkinsBuildNumber?: number
   jenkinsBuildUrl?: string
+  argoCdApplication?: string
+  argoCdSyncStatus?: string
+  argoCdHealthStatus?: string
+  argoCdUrl?: string
   aiTriage?: string
   _demo?: boolean
 }

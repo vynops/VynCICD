@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import useSWR from 'swr'
-import { Users, Plus, Trash2, X, Loader2, Shield } from 'lucide-react'
+import { Users, Plus, Trash2, X, Loader2, Shield, Eye, EyeOff, Power } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { User } from '@/lib/user-store'
 
@@ -24,6 +24,7 @@ function UserModal({ user, onClose, onSave }: { user?: User; onClose: () => void
   const [email, setEmail]       = useState(user?.email ?? '')
   const [role, setRole]         = useState<'admin' | 'editor' | 'viewer'>(user?.role ?? 'viewer')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [saving, setSaving]     = useState(false)
   const [error, setError]       = useState('')
 
@@ -75,8 +76,14 @@ function UserModal({ user, onClose, onSave }: { user?: User; onClose: () => void
           </div>
           <div>
             <label className="text-[11px] text-slate-400 block mb-1.5">{user ? 'New Password (leave blank to keep)' : 'Password'}</label>
-            <input value={password} onChange={e => setPassword(e.target.value)} type="password" placeholder="••••••••"
-              className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500/50" />
+            <div className="relative">
+              <input value={password} onChange={e => setPassword(e.target.value)} type={showPassword ? 'text' : 'password'} placeholder="••••••••"
+                className="w-full px-3 py-2 pr-10 rounded-lg bg-slate-900 border border-slate-700 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500/50" />
+              <button type="button" onClick={() => setShowPassword(value => !value)} aria-label={showPassword ? 'Hide password' : 'Show password'} title={showPassword ? 'Hide password' : 'Show password'}
+                className="absolute inset-y-0 right-0 px-3 text-slate-500 hover:text-white transition-colors">
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
           </div>
         </div>
         <div className="flex gap-3 mt-6">
@@ -104,6 +111,15 @@ export default function TeamPage() {
     mutate()
   }
 
+  async function toggleUserActive(user: User) {
+    if (user.id === me?.id) return
+    const action = user.active ? 'deactivate' : 'activate'
+    if (!confirm(`${action.charAt(0).toUpperCase()}${action.slice(1)} ${user.name}'s account?`)) return
+    const res = await fetch(`/api/users/${user.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ active: !user.active }) })
+    if (!res.ok) { const data = await res.json() as { error?: string }; alert(data.error ?? `Unable to ${action} account.`) }
+    mutate()
+  }
+
   const isAdmin = me?.role === 'admin'
 
   return (
@@ -128,6 +144,7 @@ export default function TeamPage() {
               <th className="text-left px-4 py-3 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">User</th>
               <th className="text-left px-4 py-3 text-[10px] font-semibold text-slate-500 uppercase tracking-wider hidden sm:table-cell">Email</th>
               <th className="text-left px-4 py-3 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Role</th>
+              <th className="text-left px-4 py-3 text-[10px] font-semibold text-slate-500 uppercase tracking-wider hidden sm:table-cell">Status</th>
               <th className="text-left px-4 py-3 text-[10px] font-semibold text-slate-500 uppercase tracking-wider hidden md:table-cell">Created</th>
               {isAdmin && <th className="px-4 py-3"></th>}
             </tr>
@@ -148,6 +165,11 @@ export default function TeamPage() {
                 <td className="px-4 py-3">
                   <span className={cn('text-[10px] font-bold px-1.5 py-0.5 rounded border capitalize', ROLE_BADGE[u.role])}>{u.role}</span>
                 </td>
+                <td className="px-4 py-3 hidden sm:table-cell">
+                  <span className={cn('text-[10px] font-bold px-1.5 py-0.5 rounded border', u.active ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' : 'bg-slate-500/15 text-slate-400 border-slate-500/30')}>
+                    {u.active ? 'Active' : 'Inactive'}
+                  </span>
+                </td>
                 <td className="px-4 py-3 hidden md:table-cell text-slate-500">
                   {new Date(u.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
                 </td>
@@ -155,6 +177,9 @@ export default function TeamPage() {
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2 justify-end">
                       <button onClick={() => setEditUser(u)} className="text-[10px] text-slate-500 hover:text-white border border-slate-700 px-2 py-1 rounded-lg transition-colors">Edit</button>
+                      <button onClick={() => toggleUserActive(u)} title={u.active ? 'Deactivate account' : 'Activate account'} aria-label={u.active ? 'Deactivate account' : 'Activate account'} className={cn('transition-colors disabled:opacity-30', u.active ? 'text-emerald-400 hover:text-emerald-300' : 'text-slate-500 hover:text-white')} disabled={u.id === me?.id}>
+                        <Power className="w-3.5 h-3.5" />
+                      </button>
                       <button onClick={() => deleteUser(u.id)} className="text-red-400 hover:text-red-300 transition-colors disabled:opacity-30" disabled={u.id === me?.id}>
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>

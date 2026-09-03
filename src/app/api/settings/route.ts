@@ -12,6 +12,8 @@ export async function GET(req: NextRequest) {
     ...s,
     k8sToken: s.k8sToken ? CONFIGURED_MASK : '',
     registryPassword: s.registryPassword ? CONFIGURED_MASK : '',
+    jenkinsApiToken: s.jenkinsApiToken ? CONFIGURED_MASK : '',
+    argoCdToken: s.argoCdToken ? CONFIGURED_MASK : '',
   })
 }
 
@@ -21,6 +23,8 @@ export async function POST(req: NextRequest) {
   const body = await req.json()
   if (body.k8sToken === CONFIGURED_MASK) delete body.k8sToken
   if (body.registryPassword === CONFIGURED_MASK) delete body.registryPassword
+  if (body.jenkinsApiToken === CONFIGURED_MASK) delete body.jenkinsApiToken
+  if (body.argoCdToken === CONFIGURED_MASK) delete body.argoCdToken
   const updated = saveSettings(body)
   return NextResponse.json(updated)
 }

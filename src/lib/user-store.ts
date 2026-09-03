@@ -12,6 +12,7 @@ export interface User {
   passwordHash: string
   passwordSalt: string
   createdAt: string
+  active: boolean
   lastLogin?: string
 }
 
@@ -25,7 +26,9 @@ function ensureDir() {
 function readUsers(): User[] {
   ensureDir()
   if (!fs.existsSync(USERS_FILE)) return []
-  try { return JSON.parse(fs.readFileSync(USERS_FILE, 'utf8')) as User[] } catch { return [] }
+  try {
+    return (JSON.parse(fs.readFileSync(USERS_FILE, 'utf8')) as User[]).map(user => ({ ...user, active: user.active !== false }))
+  } catch { return [] }
 }
 
 function writeUsers(users: User[]) {
@@ -66,18 +69,24 @@ export function createUser(data: { email: string; name: string; role: UserRole; 
     passwordHash: hash,
     passwordSalt: salt,
     createdAt: new Date().toISOString(),
+    active: true,
   }
   users.push(user)
   writeUsers(users)
   return user
 }
 
-export function updateUser(id: string, updates: Partial<Pick<User, 'name' | 'role'> & { password?: string }>): User {
+export function updateUser(id: string, updates: Partial<Pick<User, 'name' | 'role' | 'active'> & { password?: string }>): User {
   const users = readUsers()
   const idx = users.findIndex(u => u.id === id)
   if (idx === -1) throw new Error('User not found')
   if (updates.name) users[idx].name = updates.name
   if (updates.role) users[idx].role = updates.role
+  if (updates.active !== undefined) {
+    const activeAdmins = users.filter(user => user.role === 'admin' && user.active)
+    if (!updates.active && users[idx].role === 'admin' && activeAdmins.length <= 1) throw new Error('Cannot deactivate the last active admin')
+    users[idx].active = updates.active
+  }
   if (updates.password) {
     const { hash, salt } = hashPassword(updates.password)
     users[idx].passwordHash = hash
@@ -111,6 +120,7 @@ export function seedDefaultAdmin(): void {
     passwordHash: hash,
     passwordSalt: salt,
     createdAt: new Date().toISOString(),
+    active: true,
   }
   writeUsers([admin])
 }

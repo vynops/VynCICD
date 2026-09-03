@@ -50,7 +50,7 @@ export default function PipelinesPage() {
   // New pipeline modal state
   const [showModal, setShowModal] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [form, setForm] = useState({ name: '', repoId: '', branch: 'main', executionMode: 'native' as 'native' | 'jenkinsfile', jenkinsJob: '', jenkinsfilePath: 'Jenkinsfile', jenkinsParameters: '' })
+  const [form, setForm] = useState({ name: '', repoId: '', branch: 'main', executionMode: 'native' as 'native' | 'jenkinsfile' | 'argocd', jenkinsJob: '', jenkinsfilePath: 'Jenkinsfile', jenkinsParameters: '', argoCdApplication: '', argoCdProject: 'vyncicd-test' })
   const [stages, setStages] = useState<PipelineStage[]>([
     { ...STAGE_DEFAULTS.lint } as PipelineStage,
     { ...STAGE_DEFAULTS.test } as PipelineStage,
@@ -63,7 +63,7 @@ export default function PipelinesPage() {
 
   function openModal() {
     setEditingId(null)
-    setForm({ name: '', repoId: repos[0]?.id ?? '', branch: 'main', executionMode: 'native', jenkinsJob: '', jenkinsfilePath: 'Jenkinsfile', jenkinsParameters: '' })
+    setForm({ name: '', repoId: repos[0]?.id ?? '', branch: 'main', executionMode: 'native', jenkinsJob: '', jenkinsfilePath: 'Jenkinsfile', jenkinsParameters: '', argoCdApplication: '', argoCdProject: 'vyncicd-test' })
     setStages([
       { ...STAGE_DEFAULTS.lint } as PipelineStage,
       { ...STAGE_DEFAULTS.test } as PipelineStage,
@@ -97,6 +97,7 @@ export default function PipelinesPage() {
       if (!s.name.trim()) { setError('All stages must have a name.'); return }
     }
     if (form.executionMode === 'jenkinsfile' && !form.jenkinsJob.trim()) { setError('Jenkins job is required.'); return }
+    if (form.executionMode === 'argocd' && !form.argoCdApplication.trim()) { setError('Argo CD application is required.'); return }
     setSaving(true); setError('')
     try {
       const res = await fetch('/api/pipelines', {
@@ -112,6 +113,8 @@ export default function PipelinesPage() {
           jenkinsfilePath: form.executionMode === 'jenkinsfile' ? form.jenkinsfilePath.trim() || 'Jenkinsfile' : undefined,
           jenkinsParameters: form.executionMode === 'jenkinsfile' ? Object.fromEntries(form.jenkinsParameters.split('\n').map(line => line.split('=').map(v => v.trim())).filter(pair => pair.length === 2 && pair[0])) : undefined,
           stages: form.executionMode === 'native' ? stages : [],
+          argoCdApplication: form.executionMode === 'argocd' ? form.argoCdApplication.trim() : undefined,
+          argoCdProject: form.executionMode === 'argocd' ? form.argoCdProject.trim() : undefined,
           environments: stages.filter(s => s.environment).map(s => s.environment!),
         }),
       })
@@ -125,7 +128,7 @@ export default function PipelinesPage() {
 
   function openEditModal(p: Pipeline) {
     setEditingId(p.id)
-    setForm({ name: p.name, repoId: p.repoId, branch: p.branch, executionMode: p.executionMode ?? 'native', jenkinsJob: p.jenkinsJob ?? '', jenkinsfilePath: p.jenkinsfilePath ?? 'Jenkinsfile', jenkinsParameters: Object.entries(p.jenkinsParameters ?? {}).map(([key, value]) => `${key}=${value}`).join('\n') })
+    setForm({ name: p.name, repoId: p.repoId, branch: p.branch, executionMode: p.executionMode ?? 'native', jenkinsJob: p.jenkinsJob ?? '', jenkinsfilePath: p.jenkinsfilePath ?? 'Jenkinsfile', jenkinsParameters: Object.entries(p.jenkinsParameters ?? {}).map(([key, value]) => `${key}=${value}`).join('\n'), argoCdApplication: p.argoCdApplication ?? '', argoCdProject: p.argoCdProject ?? 'vyncicd-test' })
     setStages(p.stages.map(s => ({ ...s })))
     setError('')
     setShowModal(true)
@@ -141,6 +144,7 @@ export default function PipelinesPage() {
       if (!s.name.trim()) { setError('All stages must have a name.'); return }
     }
     if (form.executionMode === 'jenkinsfile' && !form.jenkinsJob.trim()) { setError('Jenkins job is required.'); return }
+    if (form.executionMode === 'argocd' && !form.argoCdApplication.trim()) { setError('Argo CD application is required.'); return }
     setSaving(true); setError('')
     try {
       const res = await fetch(`/api/pipelines/${editingId}`, {
@@ -155,6 +159,8 @@ export default function PipelinesPage() {
           jenkinsfilePath: form.executionMode === 'jenkinsfile' ? form.jenkinsfilePath.trim() || 'Jenkinsfile' : undefined,
           jenkinsParameters: form.executionMode === 'jenkinsfile' ? Object.fromEntries(form.jenkinsParameters.split('\n').map(line => line.split('=').map(v => v.trim())).filter(pair => pair.length === 2 && pair[0])) : undefined,
           stages: form.executionMode === 'native' ? stages : [],
+          argoCdApplication: form.executionMode === 'argocd' ? form.argoCdApplication.trim() : undefined,
+          argoCdProject: form.executionMode === 'argocd' ? form.argoCdProject.trim() : undefined,
           environments: stages.filter(s => s.environment).map(s => s.environment!),
         }),
       })
@@ -381,16 +387,23 @@ export default function PipelinesPage() {
                 <select
                   className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500"
                   value={form.executionMode}
-                  onChange={e => setForm(f => ({ ...f, executionMode: e.target.value as 'native' | 'jenkinsfile' }))}
+                  onChange={e => setForm(f => ({ ...f, executionMode: e.target.value as 'native' | 'jenkinsfile' | 'argocd' }))}
                 >
                   <option value="native">Native VynCICD stages</option>
                   <option value="jenkinsfile">Jenkinsfile via Jenkins</option>
+                  <option value="argocd">Argo CD GitOps deployment</option>
                 </select>
                 {form.executionMode === 'jenkinsfile' && (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <input className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500" placeholder="Jenkins job, e.g. team/api-build" value={form.jenkinsJob} onChange={e => setForm(f => ({ ...f, jenkinsJob: e.target.value }))} />
                     <input className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500" placeholder="Jenkinsfile path" value={form.jenkinsfilePath} onChange={e => setForm(f => ({ ...f, jenkinsfilePath: e.target.value }))} />
                     <textarea className="sm:col-span-2 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white font-mono placeholder-slate-600 focus:outline-none focus:border-emerald-500 resize-none" rows={3} placeholder="Optional parameters, one KEY=VALUE per line" value={form.jenkinsParameters} onChange={e => setForm(f => ({ ...f, jenkinsParameters: e.target.value }))} />
+                  </div>
+                )}
+                {form.executionMode === 'argocd' && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <input className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500" placeholder="Argo CD application, e.g. argocd-nginx-test" value={form.argoCdApplication} onChange={e => setForm(f => ({ ...f, argoCdApplication: e.target.value }))} />
+                    <input className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500" placeholder="Argo CD project" value={form.argoCdProject} onChange={e => setForm(f => ({ ...f, argoCdProject: e.target.value }))} />
                   </div>
                 )}
               </div>

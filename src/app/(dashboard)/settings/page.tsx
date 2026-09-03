@@ -26,12 +26,12 @@ const AI_PROVIDERS = [
     label: 'Groq (Recommended)',
     keyLabel: 'Groq API Key',
     keyPlaceholder: 'gsk_...',
-    defaultModel: 'llama-3.3-70b-versatile',
+    defaultModel: 'openai/gpt-oss-120b',
     models: [
-      { value: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B Versatile' },
-      { value: 'llama-3.1-8b-instant', label: 'Llama 3.1 8B Instant (Fast)' },
-      { value: 'mixtral-8x7b-32768', label: 'Mixtral 8x7B (Long Context)' },
-      { value: 'gemma2-9b-it', label: 'Gemma 2 9B' },
+      { value: 'openai/gpt-oss-120b', label: 'GPT OSS 120B' },
+      { value: 'openai/gpt-oss-20b', label: 'GPT OSS 20B (Fast)' },
+      { value: 'groq/compound', label: 'Groq Compound' },
+      { value: 'groq/compound-mini', label: 'Groq Compound Mini' },
     ],
   },
   {
@@ -317,6 +317,16 @@ export default function SettingsPage() {
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-semibold text-white">Jenkins</h3>
                 <TestConnBtn id="jenkins" endpoint="/api/settings/test-jenkins" body={{}} label="Test connection" />
+              </div>
+              <div className="border-t border-slate-800 pt-5 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-white">Argo CD</h3>
+                  <TestConnBtn id="argocd" endpoint="/api/settings/test-argocd" body={{}} label="Test connection" />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Field label="Argo CD URL" source="settings.json"><Input value={form.argoCdUrl ?? ''} onChange={v => update('argoCdUrl', v)} placeholder="https://argocd.example.internal" /></Field>
+                  <Field label="Argo CD API Token" source="settings.json"><RevealInput value={form.argoCdToken ?? ''} onChange={v => update('argoCdToken', v)} placeholder="••••••••" /></Field>
+                </div>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <Field label="Jenkins URL" source="settings.json"><Input value={form.jenkinsUrl ?? ''} onChange={v => update('jenkinsUrl', v)} placeholder="https://jenkins.example.com" /></Field>
