@@ -1,3 +1,5 @@
+<div align="center">
+
 # VynCICD
 
 **A self-hosted CI/CD control plane for native pipelines, Jenkinsfile execution, Kubernetes delivery, security scanning, notifications, AI triage, and DORA metrics.**
@@ -21,6 +23,8 @@ Jenkinsfile pipeline:
 ```
 
 VynCICD is the control plane and dashboard. The selected execution engine owns the actual work.
+
+</div>
 
 ---
 
