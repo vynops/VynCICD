@@ -14,6 +14,8 @@ Connect your repositories, define pipelines in YAML, deploy to Kubernetes, and l
 
 VynCICD gives teams one place to connect repositories, define or trigger pipelines, inspect runs, track deployments, manage incidents, and compare engineering performance.
 
+</div>
+
 ```text
 Native pipeline:
   VynCICD -> VynCICD runner -> stages execute
@@ -24,7 +26,7 @@ Jenkinsfile pipeline:
 
 VynCICD is the control plane and dashboard. The selected execution engine owns the actual work.
 
-</div>
+
 
 ---
 
