@@ -31,21 +31,53 @@ VynCICD is the control plane and dashboard. The selected execution engine owns t
 ---
 
 ## Screenshots
-| Screenshot | Screenshot |
-|---|---|
-| [![Login and first-time setup](screenshots/Screenshot%202026-09-01%20133059.png)](screenshots/Screenshot%202026-09-01%20133059.png)<br>Login and first-time admin setup. | [![Overview dashboard](screenshots/Screenshot%202026-09-01%20133243.png)](screenshots/Screenshot%202026-09-01%20133243.png)<br>Overview dashboard with run health, DORA metrics, recent deployments, and incident load. |
-| [![Pipeline catalog](screenshots/Screenshot%202026-09-01%20133312.png)](screenshots/Screenshot%202026-09-01%20133312.png)<br>Pipeline catalog showing pending, idle, successful, and failed pipeline definitions with trigger controls. | [![Jenkins pipeline creation](screenshots/Screenshot%202026-09-01%20133940.png)](screenshots/Screenshot%202026-09-01%20133940.png)<br>New pipeline flow for Jenkinsfile execution through Jenkins. |
-| [![Argo CD pipeline creation](screenshots/Screenshot%202026-09-01%20134002.png)](screenshots/Screenshot%202026-09-01%20134002.png)<br>New pipeline flow for Argo CD GitOps deployment. | [![Pipeline runs](screenshots/Screenshot%202026-09-01%20134159.png)](screenshots/Screenshot%202026-09-01%20134159.png)<br>Run history with success, failed, pending, filter, search, and export states. |
-| [![Argo CD run detail](screenshots/Screenshot%202026-09-01%20134242.png)](screenshots/Screenshot%202026-09-01%20134242.png)<br>Expanded Argo CD run detail with manual trigger metadata, sync state, health state, and external Argo CD link. | [![Jenkins run detail](screenshots/Screenshot%202026-09-01%20134313.png)](screenshots/Screenshot%202026-09-01%20134313.png)<br>Expanded Jenkins run detail with build duration and Jenkins build artifact link. |
-| [![Repositories](screenshots/Screenshot%202026-09-01%20134334.png)](screenshots/Screenshot%202026-09-01%20134334.png)<br>Repository cards with provider metadata and webhook-active status. | [![Environments](screenshots/Screenshot%202026-09-01%20134402.png)](screenshots/Screenshot%202026-09-01%20134402.png)<br>Deployment environment targets for development, production, and lab clusters. |
-| [![Deployments](screenshots/Screenshot%202026-09-01%20134441.png)](screenshots/Screenshot%202026-09-01%20134441.png)<br>Deployment ledger with staging releases, versions, passed health gates, and rollback actions. | [![Security scans](screenshots/Screenshot%202026-09-01%20134621.png)](screenshots/Screenshot%202026-09-01%20134621.png)<br>Security and compliance scan artifacts with CVE counts, secret detection, build-block counters, and passed scan results. |
-| [![Analytics and DORA](screenshots/Screenshot%202026-09-01%20134646.png)](screenshots/Screenshot%202026-09-01%20134646.png)<br>DORA analytics with deployment frequency, lead time, MTTR, change failure rate, build activity, and failing-pipeline trends. | [![Incidents](screenshots/Screenshot%202026-09-01%20134715.png)](screenshots/Screenshot%202026-09-01%20134715.png)<br>Incident queue with severity, acknowledgement breach timers, assignment, acknowledgement, and resolution actions. |
-| [![On-call](screenshots/Screenshot%202026-09-01%20134754.png)](screenshots/Screenshot%202026-09-01%20134754.png)<br>On-call schedule history and shift management. | [![Routing and escalations](screenshots/Screenshot%202026-09-01%20134814.png)](screenshots/Screenshot%202026-09-01%20134814.png)<br>Routing rules and escalation policies for alert delivery to Slack and on-call responders. |
-| [![AI Copilot](screenshots/Screenshot%202026-09-01%20134834.png)](screenshots/Screenshot%202026-09-01%20134834.png)<br>AI Copilot workspace with usage counters, prompt shortcuts, and pipeline triage prompts. | [![Settings and integrations](screenshots/Screenshot%202026-09-01%20134859.png)](screenshots/Screenshot%202026-09-01%20134859.png)<br>Settings for Kubernetes, registry, credentials, notifications, AI, DORA targets, and token usage. |
-| [![Team and roles](screenshots/Screenshot%202026-09-01%20134915.png)](screenshots/Screenshot%202026-09-01%20134915.png)<br>Team management with admin/viewer roles and role reference. | [![Native pipeline stages](screenshots/Screenshot%202026-09-01%20154833.png)](screenshots/Screenshot%202026-09-01%20154833.png)<br>Native VynCICD stage editor with lint, test, build, and scan steps. |
-| [![Execution mode selector](screenshots/Screenshot%202026-09-01%20154954.png)](screenshots/Screenshot%202026-09-01%20154954.png)<br>Execution-mode selector for native stages, Jenkinsfile via Jenkins, and Argo CD GitOps deployment. |  |
+
+| 01 · Login & First-Time Setup | 02 · Overview Dashboard |
+| :---: | :---: |
+| <a href="screenshots/Screenshot%202026-09-01%20133059.png"><img src="screenshots/Screenshot%202026-09-01%20133059.png" alt="Login & First-Time Setup" width="100%" /></a> | <a href="screenshots/Screenshot%202026-09-01%20133243.png"><img src="screenshots/Screenshot%202026-09-01%20133243.png" alt="Overview Dashboard" width="100%" /></a> |
+
+| 03 · Pipeline Catalog | 04 · Jenkins Pipeline Creation |
+| :---: | :---: |
+| <a href="screenshots/Screenshot%202026-09-01%20133312.png"><img src="screenshots/Screenshot%202026-09-01%20133312.png" alt="Pipeline Catalog" width="100%" /></a> | <a href="screenshots/Screenshot%202026-09-01%20133940.png"><img src="screenshots/Screenshot%202026-09-01%20133940.png" alt="Jenkins Pipeline Creation" width="100%" /></a> |
+
+| 05 · Argo CD Pipeline Creation | 06 · Pipeline Runs |
+| :---: | :---: |
+| <a href="screenshots/Screenshot%202026-09-01%20134002.png"><img src="screenshots/Screenshot%202026-09-01%20134002.png" alt="Argo CD Pipeline Creation" width="100%" /></a> | <a href="screenshots/Screenshot%202026-09-01%20134159.png"><img src="screenshots/Screenshot%202026-09-01%20134159.png" alt="Pipeline Runs" width="100%" /></a> |
+
+| 07 · Argo CD Run Detail | 08 · Jenkins Run Detail |
+| :---: | :---: |
+| <a href="screenshots/Screenshot%202026-09-01%20134242.png"><img src="screenshots/Screenshot%202026-09-01%20134242.png" alt="Argo CD Run Detail" width="100%" /></a> | <a href="screenshots/Screenshot%202026-09-01%20134313.png"><img src="screenshots/Screenshot%202026-09-01%20134313.png" alt="Jenkins Run Detail" width="100%" /></a> |
+
+| 09 · Repositories | 10 · Environments |
+| :---: | :---: |
+| <a href="screenshots/Screenshot%202026-09-01%20134334.png"><img src="screenshots/Screenshot%202026-09-01%20134334.png" alt="Repositories" width="100%" /></a> | <a href="screenshots/Screenshot%202026-09-01%20134402.png"><img src="screenshots/Screenshot%202026-09-01%20134402.png" alt="Environments" width="100%" /></a> |
+
+| 11 · Deployments | 12 · Security Scans |
+| :---: | :---: |
+| <a href="screenshots/Screenshot%202026-09-01%20134441.png"><img src="screenshots/Screenshot%202026-09-01%20134441.png" alt="Deployments" width="100%" /></a> | <a href="screenshots/Screenshot%202026-09-01%20134621.png"><img src="screenshots/Screenshot%202026-09-01%20134621.png" alt="Security Scans" width="100%" /></a> |
+
+| 13 · Analytics & DORA | 14 · Incidents |
+| :---: | :---: |
+| <a href="screenshots/Screenshot%202026-09-01%20134646.png"><img src="screenshots/Screenshot%202026-09-01%20134646.png" alt="Analytics & DORA" width="100%" /></a> | <a href="screenshots/Screenshot%202026-09-01%20134715.png"><img src="screenshots/Screenshot%202026-09-01%20134715.png" alt="Incidents" width="100%" /></a> |
+
+| 15 · On-Call | 16 · Routing & Escalations |
+| :---: | :---: |
+| <a href="screenshots/Screenshot%202026-09-01%20134754.png"><img src="screenshots/Screenshot%202026-09-01%20134754.png" alt="On-Call" width="100%" /></a> | <a href="screenshots/Screenshot%202026-09-01%20134814.png"><img src="screenshots/Screenshot%202026-09-01%20134814.png" alt="Routing & Escalations" width="100%" /></a> |
+
+| 17 · AI Copilot | 18 · Settings & Integrations |
+| :---: | :---: |
+| <a href="screenshots/Screenshot%202026-09-01%20134834.png"><img src="screenshots/Screenshot%202026-09-01%20134834.png" alt="AI Copilot" width="100%" /></a> | <a href="screenshots/Screenshot%202026-09-01%20134859.png"><img src="screenshots/Screenshot%202026-09-01%20134859.png" alt="Settings & Integrations" width="100%" /></a> |
+
+| 19 · Team & Roles | 20 · Native Pipeline Stages |
+| :---: | :---: |
+| <a href="screenshots/Screenshot%202026-09-01%20134915.png"><img src="screenshots/Screenshot%202026-09-01%20134915.png" alt="Team & Roles" width="100%" /></a> | <a href="screenshots/Screenshot%202026-09-01%20154833.png"><img src="screenshots/Screenshot%202026-09-01%20154833.png" alt="Native Pipeline Stages" width="100%" /></a> |
+
+| 21 · Execution Mode Selector |
+| :---: |
+| <a href="screenshots/Screenshot%202026-09-01%20154954.png"><img src="screenshots/Screenshot%202026-09-01%20154954.png" alt="Execution Mode Selector" width="100%" /></a> |
 
 ---
+
 
 ## Contents
 
