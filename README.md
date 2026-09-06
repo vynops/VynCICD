@@ -24,6 +24,24 @@ VynCICD is the control plane and dashboard. The selected execution engine owns t
 
 ---
 
+## Screenshots
+
+| Screenshot | Screenshot |
+|---|---|
+| [![Login and first-time setup](screenshots/Screenshot%202026-09-01%20133059.png)](screenshots/Screenshot%202026-09-01%20133059.png)<br>Login and first-time admin setup. | [![Overview dashboard](screenshots/Screenshot%202026-09-01%20133243.png)](screenshots/Screenshot%202026-09-01%20133243.png)<br>Overview dashboard with run health, DORA metrics, recent deployments, and incident load. |
+| [![Pipeline catalog](screenshots/Screenshot%202026-09-01%20133312.png)](screenshots/Screenshot%202026-09-01%20133312.png)<br>Pipeline catalog showing pending, idle, successful, and failed pipeline definitions with trigger controls. | [![Jenkins pipeline creation](screenshots/Screenshot%202026-09-01%20133940.png)](screenshots/Screenshot%202026-09-01%20133940.png)<br>New pipeline flow for Jenkinsfile execution through Jenkins. |
+| [![Argo CD pipeline creation](screenshots/Screenshot%202026-09-01%20134002.png)](screenshots/Screenshot%202026-09-01%20134002.png)<br>New pipeline flow for Argo CD GitOps deployment. | [![Pipeline runs](screenshots/Screenshot%202026-09-01%20134159.png)](screenshots/Screenshot%202026-09-01%20134159.png)<br>Run history with success, failed, pending, filter, search, and export states. |
+| [![Argo CD run detail](screenshots/Screenshot%202026-09-01%20134242.png)](screenshots/Screenshot%202026-09-01%20134242.png)<br>Expanded Argo CD run detail with manual trigger metadata, sync state, health state, and external Argo CD link. | [![Jenkins run detail](screenshots/Screenshot%202026-09-01%20134313.png)](screenshots/Screenshot%202026-09-01%20134313.png)<br>Expanded Jenkins run detail with build duration and Jenkins build artifact link. |
+| [![Repositories](screenshots/Screenshot%202026-09-01%20134334.png)](screenshots/Screenshot%202026-09-01%20134334.png)<br>Repository cards with provider metadata and webhook-active status. | [![Environments](screenshots/Screenshot%202026-09-01%20134402.png)](screenshots/Screenshot%202026-09-01%20134402.png)<br>Deployment environment targets for development, production, and lab clusters. |
+| [![Deployments](screenshots/Screenshot%202026-09-01%20134441.png)](screenshots/Screenshot%202026-09-01%20134441.png)<br>Deployment ledger with staging releases, versions, passed health gates, and rollback actions. | [![Security scans](screenshots/Screenshot%202026-09-01%20134621.png)](screenshots/Screenshot%202026-09-01%20134621.png)<br>Security and compliance scan artifacts with CVE counts, secret detection, build-block counters, and passed scan results. |
+| [![Analytics and DORA](screenshots/Screenshot%202026-09-01%20134646.png)](screenshots/Screenshot%202026-09-01%20134646.png)<br>DORA analytics with deployment frequency, lead time, MTTR, change failure rate, build activity, and failing-pipeline trends. | [![Incidents](screenshots/Screenshot%202026-09-01%20134715.png)](screenshots/Screenshot%202026-09-01%20134715.png)<br>Incident queue with severity, acknowledgement breach timers, assignment, acknowledgement, and resolution actions. |
+| [![On-call](screenshots/Screenshot%202026-09-01%20134754.png)](screenshots/Screenshot%202026-09-01%20134754.png)<br>On-call schedule history and shift management. | [![Routing and escalations](screenshots/Screenshot%202026-09-01%20134814.png)](screenshots/Screenshot%202026-09-01%20134814.png)<br>Routing rules and escalation policies for alert delivery to Slack and on-call responders. |
+| [![AI Copilot](screenshots/Screenshot%202026-09-01%20134834.png)](screenshots/Screenshot%202026-09-01%20134834.png)<br>AI Copilot workspace with usage counters, prompt shortcuts, and pipeline triage prompts. | [![Settings and integrations](screenshots/Screenshot%202026-09-01%20134859.png)](screenshots/Screenshot%202026-09-01%20134859.png)<br>Settings for Kubernetes, registry, credentials, notifications, AI, DORA targets, and token usage. |
+| [![Team and roles](screenshots/Screenshot%202026-09-01%20134915.png)](screenshots/Screenshot%202026-09-01%20134915.png)<br>Team management with admin/viewer roles and role reference. | [![Native pipeline stages](screenshots/Screenshot%202026-09-01%20154833.png)](screenshots/Screenshot%202026-09-01%20154833.png)<br>Native VynCICD stage editor with lint, test, build, and scan steps. |
+| [![Execution mode selector](screenshots/Screenshot%202026-09-01%20154954.png)](screenshots/Screenshot%202026-09-01%20154954.png)<br>Execution-mode selector for native stages, Jenkinsfile via Jenkins, and Argo CD GitOps deployment. |  |
+
+---
+
 ## Contents
 
 1. [Understand The System](#understand-the-system)
