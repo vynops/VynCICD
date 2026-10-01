@@ -1,6 +1,7 @@
 'use client'
 
 import useSWR from 'swr'
+import { useEffect, useState } from 'react'
 import { Shield, AlertTriangle, CheckCircle, XCircle, AlertCircle, Download, Key } from 'lucide-react'
 import { timeAgo, cn } from '@/lib/utils'
 import type { SecurityScan, Vulnerability } from '@/lib/data-store'
@@ -43,6 +44,16 @@ function VulnBadge({ vuln }: { vuln: Vulnerability }) {
 
 export default function SecurityPage() {
   const { data: scans = [] } = useSWR<SecurityScan[]>('/api/security', fetcher, { refreshInterval: 30000 })
+  const [focusedScanId, setFocusedScanId] = useState<string | null>(null)
+
+  useEffect(() => {
+    setFocusedScanId(new URLSearchParams(window.location.search).get('scanId'))
+  }, [])
+
+  useEffect(() => {
+    if (!focusedScanId || scans.length === 0) return
+    document.getElementById(`scan-${focusedScanId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [focusedScanId, scans])
 
   const totalCritical = scans.reduce((sum, s) => sum + s.vulnerabilities.filter(v => v.severity === 'critical').length, 0)
   const totalHigh     = scans.reduce((sum, s) => sum + s.vulnerabilities.filter(v => v.severity === 'high').length, 0)
@@ -71,7 +82,7 @@ export default function SecurityPage() {
         {scans.map(scan => {
           const s = STATUS_MAP[scan.status] ?? STATUS_MAP.skipped
           return (
-            <div key={scan.id} className="bg-[#0d1117] border border-slate-800/60 rounded-xl overflow-hidden">
+            <div key={scan.id} id={`scan-${scan.id}`} className="bg-[#0d1117] border border-slate-800/60 rounded-xl overflow-hidden scroll-mt-6">
               <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-800/60">
                 {s.icon}
                 <div>

@@ -6,12 +6,14 @@ import { Bot, Send, Loader2, User, RotateCcw, History, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const fetcher = (url: string) => fetch(url).then(r => r.json())
+type Source = { label: string; href: string }
 
 interface Message {
   id: string
   role: 'user' | 'assistant'
   content: string
   ts: string
+  sources?: Source[]
 }
 
 const PROMPTS = [
@@ -70,12 +72,13 @@ export default function CopilotPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ messages: [...messages, userMsg].map(m => ({ role: m.role, content: m.content })) }),
       })
-      const data = await res.json() as { answer?: string; error?: string }
+      const data = await res.json() as { answer?: string; error?: string; sources?: Source[] }
       setMessages(prev => [...prev, {
         id: crypto.randomUUID(),
         role: 'assistant',
         content: data.answer ?? data.error ?? 'No response.',
         ts: new Date().toISOString(),
+        sources: data.sources,
       }])
     } catch {
       setMessages(prev => [...prev, { id: crypto.randomUUID(), role: 'assistant', content: 'Network error. Please try again.', ts: new Date().toISOString() }])
@@ -124,6 +127,17 @@ export default function CopilotPage() {
                   : 'bg-slate-800/60 text-slate-200 border border-slate-700/40'
               )}>
                 {msg.content}
+                {msg.sources && msg.sources.length > 0 && (
+                  <div className="mt-3 border-t border-slate-700/60 pt-2 space-y-1">
+                    <div className="text-[10px] font-semibold uppercase text-slate-500">Sources</div>
+                    {msg.sources.map(source => (
+                      <a key={source.href} href={source.href} target="_blank" rel="noreferrer"
+                        className="block text-xs text-emerald-300 hover:text-emerald-200 underline underline-offset-2">
+                        {source.label}
+                      </a>
+                    ))}
+                  </div>
+                )}
               </div>
               {msg.role === 'user' && (
                 <div className="w-7 h-7 rounded-lg bg-slate-700 flex items-center justify-center flex-shrink-0 mt-0.5">

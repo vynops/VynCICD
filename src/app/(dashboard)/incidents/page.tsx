@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import useSWR from 'swr'
 import { AlertTriangle, CheckCircle, Clock, Download, Search, X, User, FileText, UserPlus, Plus, Timer } from 'lucide-react'
 import { timeAgo, cn, exportCsv } from '@/lib/utils'
@@ -227,9 +227,19 @@ export default function IncidentsPage() {
   const [actionModal, setActionModal] = useState<{ incident: Incident; next: 'acknowledged' | 'resolved' } | null>(null)
   const [assignModal, setAssignModal] = useState<Incident | null>(null)
   const [createModal, setCreateModal] = useState(false)
+  const [focusedIncidentId, setFocusedIncidentId] = useState<string | null>(null)
+
+  useEffect(() => {
+    setFocusedIncidentId(new URLSearchParams(window.location.search).get('incidentId'))
+  }, [])
+
+  useEffect(() => {
+    if (!focusedIncidentId || incidents.length === 0) return
+    document.getElementById(`incident-${focusedIncidentId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [focusedIncidentId, incidents])
 
   const filtered = incidents.filter(i => {
-    const matchStatus   = statusFilter === 'all' || i.status === statusFilter
+    const matchStatus   = focusedIncidentId ? i.id === focusedIncidentId : statusFilter === 'all' || i.status === statusFilter
     const matchSeverity = severityFilter === 'all' || i.severity === severityFilter
     const q = search.toLowerCase()
     const matchSearch   = !q || i.title.toLowerCase().includes(q) || (i.source ?? '').toLowerCase().includes(q) || (i.repo ?? '').toLowerCase().includes(q) || (i.author ?? '').toLowerCase().includes(q)
@@ -328,7 +338,7 @@ export default function IncidentsPage() {
       {/* Incident list */}
       <div className="space-y-2">
         {filtered.map(inc => (
-          <div key={inc.id} className="bg-[#0d1117] border border-slate-800/60 rounded-xl p-4 hover:border-slate-700/50 transition-colors">
+          <div key={inc.id} id={`incident-${inc.id}`} className="bg-[#0d1117] border border-slate-800/60 rounded-xl p-4 hover:border-slate-700/50 transition-colors scroll-mt-6">
             <div className="flex flex-wrap items-start gap-3">
               <AlertTriangle className={cn('w-4 h-4 mt-0.5 flex-shrink-0', inc.severity === 'critical' ? 'text-red-400' : inc.severity === 'high' ? 'text-orange-400' : 'text-yellow-400')} />
               <div className="flex-1 min-w-0">

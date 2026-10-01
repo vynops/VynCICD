@@ -105,9 +105,15 @@ function RunDetail({ run }: { run: PipelineRun }) {
 
 export default function RunsPage() {
   const { data: runs = [], mutate } = useSWR<PipelineRun[]>('/api/runs?limit=100', fetcher, { refreshInterval: 15000 })
+  const [focusedRunId, setFocusedRunId] = useState<string | null>(null)
+  const { data: focusedRun } = useSWR<PipelineRun>(focusedRunId ? `/api/runs/${encodeURIComponent(focusedRunId)}` : null, fetcher)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [expandedId, setExpandedId] = useState<string | null>(null)
+
+  useEffect(() => {
+    setFocusedRunId(new URLSearchParams(window.location.search).get('runId'))
+  }, [])
 
   useEffect(() => {
     const activeRuns = runs.filter(item =>
@@ -163,6 +169,13 @@ export default function RunsPage() {
           <Download className="w-3 h-3" /> Export
         </button>
       </div>
+
+      {focusedRun && (
+        <section className="bg-[#0d1117] border border-emerald-500/30 rounded-xl p-4" aria-label="Referenced pipeline run">
+          <div className="text-xs font-semibold text-white mb-3">Referenced run · {focusedRun.id}</div>
+          <RunDetail run={focusedRun} />
+        </section>
+      )}
 
       {/* Table */}
       <div className="bg-[#0d1117] border border-slate-800/60 rounded-xl overflow-hidden">
