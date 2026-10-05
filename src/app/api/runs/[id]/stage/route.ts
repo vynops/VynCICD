@@ -142,7 +142,8 @@ export async function POST(
       }
 
       if (createdIncident) {
-        notifyIncidentOpened({
+        await notifyIncidentOpened({
+          incidentId: createdIncident.id,
           title: createdIncident.title,
           severity: createdIncident.severity,
           category: createdIncident.category,

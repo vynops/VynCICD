@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireRole } from '@/lib/auth'
 import { getSettings } from '@/lib/settings-store'
+import { sendEmail } from '@/lib/notifier'
 
 interface TestResult { success: boolean; message: string }
 
@@ -44,24 +45,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json<TestResult>({ success: false, message: 'No recipient configured — add an address in Default recipients.' })
     }
     try {
-      // Use Node's net module to verify SMTP connectivity (port check)
-      // Full send requires nodemailer which is not installed — do a TCP handshake check
-      const net = await import('net')
-      await new Promise<void>((resolve, reject) => {
-        const socket = net.createConnection({ host: s.smtpHost, port: s.smtpPort, timeout: 6000 }, () => {
-          socket.destroy()
-          resolve()
-        })
-        socket.on('error', reject)
-        socket.on('timeout', () => { socket.destroy(); reject(new Error('Connection timed out')) })
-      })
+      const result = await sendEmail([to], 'VynCICD test notification', 'VynCICD email delivery test.')
       return NextResponse.json<TestResult>({
-        success: true,
-        message: `SMTP server ${s.smtpHost}:${s.smtpPort} is reachable. Would send to ${to}. (Full send requires nodemailer — install it to enable actual email delivery.)`,
+        success: result.status === 'accepted',
+        message: result.status === 'accepted' ? 'SMTP accepted the test message. Confirm receipt at the destination.' : `Email test not accepted: ${result.code}`,
       })
     } catch (e) {
-      const err = e as { message?: string }
-      return NextResponse.json<TestResult>({ success: false, message: `Cannot reach ${s.smtpHost}:${s.smtpPort} — ${err.message ?? 'connection failed'}` })
+      return NextResponse.json<TestResult>({ success: false, message: 'Email delivery test failed.' })
     }
   }
 

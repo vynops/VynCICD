@@ -1,69 +1,66 @@
 import nodemailer from 'nodemailer'
 import { getSettings } from './settings-store'
 
-export async function sendSlack(text: string): Promise<void> {
-  const { alertSlackEnabled, slackWebhookUrl } = getSettings()
-  if (!alertSlackEnabled || !slackWebhookUrl) return
+export interface DeliveryResult { status: 'accepted' | 'failed' | 'skipped'; code: string }
+
+async function postNotification(url: string, payload: unknown): Promise<DeliveryResult> {
   try {
-    const res = await fetch(slackWebhookUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text }),
-    })
-    if (!res.ok) console.error('[notifier] Slack webhook failed:', res.status)
-  } catch (e) { console.error('[notifier] Slack error:', e) }
+    const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), signal: AbortSignal.timeout(10000) })
+    return { status: res.ok ? 'accepted' : 'failed', code: `http_${res.status}` }
+  } catch { return { status: 'failed', code: 'network_or_timeout' } }
 }
 
-export async function sendTeam(text: string): Promise<void> {
+export async function sendSlack(text: string): Promise<DeliveryResult> {
+  const { alertSlackEnabled, slackWebhookUrl } = getSettings()
+  if (!alertSlackEnabled) return { status: 'skipped', code: 'disabled' }
+  if (!slackWebhookUrl) return { status: 'failed', code: 'missing_endpoint' }
+  return postNotification(slackWebhookUrl, { text })
+}
+
+export async function sendTeam(text: string): Promise<DeliveryResult> {
   const { alertTeamEnabled, teamsWebhookUrl } = getSettings()
-  if (!alertTeamEnabled || !teamsWebhookUrl) return
-  try {
-    const res = await fetch(teamsWebhookUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+  if (!alertTeamEnabled) return { status: 'skipped', code: 'disabled' }
+  if (!teamsWebhookUrl) return { status: 'failed', code: 'missing_endpoint' }
+  return postNotification(teamsWebhookUrl, {
         '@type': 'MessageCard',
         '@context': 'https://schema.org/extensions',
         summary: 'VynCICD notification',
         text,
-      }),
-    })
-    if (!res.ok) console.error('[notifier] Teams webhook failed:', res.status)
-  } catch (e) { console.error('[notifier] Teams error:', e) }
+  })
 }
 
-export async function sendCustomWebhook(payload: Record<string, unknown>): Promise<void> {
+export async function sendCustomWebhook(payload: Record<string, unknown>): Promise<DeliveryResult> {
   const { alertWebhookEnabled, customWebhookUrl } = getSettings()
-  if (!alertWebhookEnabled || !customWebhookUrl) return
-  try {
-    const res = await fetch(customWebhookUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    })
-    if (!res.ok) console.error('[notifier] Custom webhook failed:', res.status)
-  } catch (e) { console.error('[notifier] Custom webhook error:', e) }
+  if (!alertWebhookEnabled) return { status: 'skipped', code: 'disabled' }
+  if (!customWebhookUrl) return { status: 'failed', code: 'missing_endpoint' }
+  return postNotification(customWebhookUrl, payload)
 }
 
-export async function sendEmail(to: string[], subject: string, body: string): Promise<void> {
+export async function sendEmail(to: string[], subject: string, body: string): Promise<DeliveryResult> {
   const s = getSettings()
-  if (!s.alertEmailEnabled || !s.smtpHost || to.length === 0) return
+  if (!s.alertEmailEnabled) return { status: 'skipped', code: 'disabled' }
+  if (!s.smtpHost || to.length === 0) return { status: 'failed', code: 'missing_smtp_or_recipients' }
   try {
     const transporter = nodemailer.createTransport({
       host: s.smtpHost,
       port: s.smtpPort || 587,
       secure: s.smtpPort === 465,
       auth: s.smtpUser ? { user: s.smtpUser, pass: s.smtpPassword } : undefined,
-      tls: { rejectUnauthorized: false },
+      tls: { rejectUnauthorized: true },
+      requireTLS: s.smtpPort !== 465,
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 10000,
     })
-    await transporter.sendMail({
+    const result = await transporter.sendMail({
       from: s.smtpFrom || s.smtpUser,
       to: to.join(', '),
       subject,
       text: body,
-      html: `<pre style="font-family:monospace;font-size:13px">${body.replace(/</g, '&lt;')}</pre>`,
+      html: `<pre style="font-family:monospace;font-size:13px">${body.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>`,
     })
-  } catch (e) { console.error('[notifier] Email error:', e) }
+    return { status: result.rejected?.length ? 'failed' : 'accepted', code: result.rejected?.length ? 'smtp_recipient_rejected' : 'smtp_accepted' }
+  } catch { return { status: 'failed', code: 'smtp_error' } }
 }
 
 export async function notifyBuildFailed(opts: {
@@ -150,6 +147,7 @@ export async function notifyDeployFailed(opts: {
 }
 
 export async function notifyIncidentOpened(opts: {
+  incidentId?: string
   title: string
   severity: 'critical' | 'high' | 'medium' | 'low'
   category: string
@@ -160,6 +158,12 @@ export async function notifyIncidentOpened(opts: {
   commit?: string
   emails: string[]
 }): Promise<void> {
+  if (opts.incidentId) {
+    if (process.env.INCIDENT_WORKER_ENABLED === 'false') return
+    const { processIncidentNotifications } = await import('./incident-worker')
+    await processIncidentNotifications(Date.now(), opts.incidentId)
+    return
+  }
   const msg = `🚨 *Incident Opened* — [${opts.severity.toUpperCase()}] ${opts.title}\nCategory: ${opts.category}\nSource: ${opts.source}${opts.repo ? `\nRepo: ${opts.repo}` : ''}${opts.branch ? `\nBranch: ${opts.branch}` : ''}${opts.commit ? `\nCommit: ${opts.commit.slice(0, 7)}` : ''}${opts.runId ? `\nRun ID: ${opts.runId}` : ''}`
   const plain = msg.replace(/\*/g, '')
   await Promise.all([

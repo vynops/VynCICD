@@ -13,10 +13,10 @@ type SlaStore = Record<string, SlaTier>
 
 function SlaBadge({ incident, sla }: { incident: Incident; sla: SlaStore }) {
   if (incident.status === 'resolved') return null
-  const tier = sla[incident.severity]
+  const tier = incident.automation ? incident.automation.sla : sla[incident.severity]
   if (!tier) return null
   const now = Date.now()
-  const created = new Date(incident.createdAt).getTime()
+  const created = new Date(incident.reopenedAt ?? incident.createdAt).getTime()
   const isAcked = incident.status === 'acknowledged'
   const ackDeadline = created + tier.ackMinutes * 60000
   const resolveDeadline = created + tier.resolveMinutes * 60000
@@ -50,16 +50,27 @@ const STATUS_BADGE: Record<string, string> = {
   resolved:     'bg-emerald-500/10 text-emerald-400',
 }
 
+async function submitIncident(url: string, body: Record<string, unknown>, method: 'POST' | 'PATCH') {
+  const response = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+  if (response.redirected || !response.headers.get('Content-Type')?.includes('application/json')) throw new Error('Your session has expired. Sign in again.')
+  if (!response.ok) throw new Error(response.status === 403 ? 'You do not have permission to update incidents.' : 'Unable to save the incident.')
+  const saved = await response.json()
+  if (!saved || typeof saved.id !== 'string') throw new Error('Unable to save the incident.')
+}
+
 function ActionModal({ incident, nextStatus, onClose, onConfirm }: {
   incident: Incident; nextStatus: 'acknowledged' | 'resolved'
   onClose: () => void; onConfirm: (notes: string) => Promise<void>
 }) {
   const [notes, setNotes] = useState(incident.notes ?? '')
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
   async function submit() {
     setSaving(true)
-    await onConfirm(notes)
-    setSaving(false)
+    setError('')
+    try { await onConfirm(notes) }
+    catch (failure) { setError(failure instanceof Error ? failure.message : 'Unable to update the incident.') }
+    finally { setSaving(false) }
   }
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
@@ -73,6 +84,7 @@ function ActionModal({ incident, nextStatus, onClose, onConfirm }: {
         <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3}
           placeholder="Add resolution notes, root cause, actions taken…"
           className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 resize-none" />
+        {error && <p role="alert" className="text-xs text-red-400 mt-2">{error}</p>}
         <div className="flex gap-3 mt-5">
           <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-slate-700 text-slate-400 text-sm hover:border-slate-600 transition-colors">Cancel</button>
           <button onClick={submit} disabled={saving}
@@ -93,6 +105,7 @@ function AssignModal({ incident, allShifts, me, onClose, onConfirm }: {
   const [custom, setCustom] = useState('')
   const [selected, setSelected] = useState('')
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
   const now = new Date()
   const roster = allShifts
     .filter((s, i, arr) => arr.findIndex(x => x.userEmail === s.userEmail) === i)
@@ -102,8 +115,10 @@ function AssignModal({ incident, allShifts, me, onClose, onConfirm }: {
     const target = selected || custom.trim()
     if (!target) return
     setSaving(true)
-    await onConfirm(target)
-    setSaving(false)
+    setError('')
+    try { await onConfirm(target) }
+    catch (failure) { setError(failure instanceof Error ? failure.message : 'Unable to assign the incident.') }
+    finally { setSaving(false) }
   }
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
@@ -132,6 +147,7 @@ function AssignModal({ incident, allShifts, me, onClose, onConfirm }: {
         <input value={custom} onChange={e => { setCustom(e.target.value); setSelected('') }}
           placeholder="Or type email manually…"
           className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 mb-4" />
+        {error && <p role="alert" className="text-xs text-red-400 mb-2">{error}</p>}
         <div className="flex gap-3">
           <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-slate-700 text-slate-400 text-sm hover:border-slate-600 transition-colors">Cancel</button>
           <button onClick={submit} disabled={saving || (!selected && !custom.trim())}
@@ -150,16 +166,17 @@ function CreateModal({ onClose, onSave }: { onClose: () => void; onSave: () => v
   const [category, setCategory] = useState('build-failure')
   const [source, setSource] = useState('')
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
   async function submit() {
     if (!title.trim()) return
     setSaving(true)
-    await fetch('/api/incidents', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title, severity, category, source, status: 'open' }),
-    })
-    setSaving(false)
-    onSave()
-    onClose()
+    setError('')
+    try {
+      await submitIncident('/api/incidents', { title, severity, category, source, status: 'open' }, 'POST')
+      onSave()
+      onClose()
+    } catch (failure) { setError(failure instanceof Error ? failure.message : 'Unable to create the incident.') }
+    finally { setSaving(false) }
   }
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
@@ -169,6 +186,7 @@ function CreateModal({ onClose, onSave }: { onClose: () => void; onSave: () => v
           <button onClick={onClose}><X size={15} className="text-slate-500 hover:text-white" /></button>
         </div>
         <div className="space-y-4">
+          {error && <p role="alert" className="text-xs text-red-400">{error}</p>}
           <div>
             <label className="text-[11px] text-slate-400 block mb-1.5">Title</label>
             <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Describe the issue…"
@@ -247,21 +265,13 @@ export default function IncidentsPage() {
   })
 
   async function updateStatus(incident: Incident, newStatus: 'acknowledged' | 'resolved', notes: string) {
-    await fetch(`/api/incidents/${incident.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: newStatus, notes, ...(newStatus === 'resolved' ? { resolvedAt: new Date().toISOString() } : {}) }),
-    })
+    await submitIncident(`/api/incidents/${incident.id}`, { status: newStatus, notes }, 'PATCH')
     setActionModal(null)
     mutate()
   }
 
   async function assignIncident(incident: Incident, assignTo: string) {
-    await fetch(`/api/incidents/${incident.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ assignedTo: assignTo }),
-    })
+    await submitIncident(`/api/incidents/${incident.id}`, { assignedTo: assignTo }, 'PATCH')
     setAssignModal(null)
     mutate()
   }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createIncident } from '@/lib/oncall-store'
+import { correlateAlert } from '@/lib/oncall-store'
+import { createHash, timingSafeEqual } from 'crypto'
 import type { Incident } from '@/lib/oncall-store'
 import { getSettings } from '@/lib/settings-store'
 import { notifyIncidentOpened } from '@/lib/notifier'
@@ -28,6 +29,7 @@ function amSeverityToIncident(s: string): Incident['severity'] {
     case 'high':
     case 'error': return 'high'
     case 'warning': return 'medium'
+    case 'medium': return 'medium'
     default: return 'low'
   }
 }
@@ -45,7 +47,9 @@ export async function POST(req: NextRequest) {
   const secret = process.env.ALERTMANAGER_SECRET ?? ''
   if (secret) {
     const provided = req.headers.get('x-alertmanager-secret') ?? ''
-    if (provided !== secret) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+    const expectedHash = createHash('sha256').update(secret).digest()
+    const providedHash = createHash('sha256').update(provided).digest()
+    if (!timingSafeEqual(expectedHash, providedHash)) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
 
   let body: AmPayload
@@ -55,10 +59,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'invalid json' }, { status: 400 })
   }
 
+  if (!body || !Array.isArray(body.alerts) || body.alerts.length > 100 || body.alerts.some(alert =>
+    !alert || !['firing', 'resolved'].includes(alert.status) || !alert.labels || typeof alert.labels !== 'object' || Array.isArray(alert.labels) ||
+    !Number.isFinite(Date.parse(alert.startsAt)) || typeof alert.fingerprint !== 'string' || !alert.fingerprint ||
+    Object.values(alert.labels).some(value => typeof value !== 'string') ||
+    (alert.annotations && (typeof alert.annotations !== 'object' || Array.isArray(alert.annotations) || Object.values(alert.annotations).some(value => typeof value !== 'string')))
+  )) return NextResponse.json({ error: 'invalid alerts' }, { status: 400 })
+
   const created: string[] = []
 
   for (const alert of body.alerts ?? []) {
-    if (alert.status !== 'firing') continue  // ignore resolved for now
 
     const title =
       alert.annotations?.summary ??
@@ -69,16 +79,21 @@ export async function POST(req: NextRequest) {
       alert.labels?.severity ?? alert.labels?.priority ?? ''
     )
 
-    const inc = createIncident({
+    const key = createHash('sha256').update(`${alert.fingerprint}\0${new Date(alert.startsAt).toISOString()}`).digest('hex')
+    let correlated
+    try { correlated = correlateAlert(key, alert.status, {
       title: title.slice(0, 200),
       severity,
       status: 'open',
       category: alert.labels?.category ?? alert.labels?.job ?? 'monitoring',
       source: `alertmanager:${alert.labels?.alertname ?? 'unknown'}`,
       notes: alert.annotations?.description ?? alert.annotations?.message ?? '',
-    })
+    }) } catch { return NextResponse.json({ error: 'Incident storage unavailable; retry delivery' }, { status: 503 }) }
+    const inc = correlated.incident
+    if (!inc || !correlated.created) continue
 
-    notifyIncidentOpened({
+    await notifyIncidentOpened({
+      incidentId: inc.id,
       title: inc.title,
       severity: inc.severity,
       category: inc.category,

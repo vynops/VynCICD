@@ -46,14 +46,16 @@ export async function getSession(): Promise<SessionPayload | null> {
   const token = cookieStore.get(sessionCookieName())?.value
   if (!token) return null
   const session = await verifySession(token)
-  return session && findUserById(session.id)?.active ? session : null
+  const user = session ? findUserById(session.id) : null
+  return session && user?.active ? { ...session, email: user.email, name: user.name, role: user.role } : null
 }
 
 export async function getSessionFromRequest(req: NextRequest): Promise<SessionPayload | null> {
   const token = req.cookies.get(sessionCookieName())?.value
   if (!token) return null
   const session = await verifySession(token)
-  return session && findUserById(session.id)?.active ? session : null
+  const user = session ? findUserById(session.id) : null
+  return session && user?.active ? { ...session, email: user.email, name: user.name, role: user.role } : null
 }
 
 export function hasRole(session: SessionPayload, minimum: 'viewer' | 'editor' | 'admin'): boolean {
