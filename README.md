@@ -71,25 +71,23 @@ VynCICD is the control plane and dashboard. The selected execution engine owns t
 7. [Install Locally](#install-locally)
 8. [Configure Environment](#configure-environment)
 9. [Run VynCICD](#run-vyncicd)
-10. [Production Deployment](#production-deployment)
-11. [Back Up And Restore](#back-up-and-restore)
-12. [Connect A Repository](#connect-a-repository)
-13. [Native Pipelines](#native-pipelines)
-14. [Jenkins CI](#jenkins-ci)
-15. [Jenkins Kubernetes CD](#jenkins-kubernetes-cd)
-16. [Argo CD GitOps Lab Setup](#argo-cd-gitops-lab-setup)
-17. [Kubernetes And k3d](#kubernetes-and-k3d)
-18. [Container Registry](#container-registry)
-19. [Resource Limits](#resource-limits)
-20. [Dashboard Workflows](#dashboard-workflows)
-21. [Settings Guide](#settings-guide)
-22. [Security And Secrets](#security-and-secrets)
-23. [Troubleshooting](#troubleshooting)
-24. [Checklists](#checklists)
-25. [Repository Reference](#repository-reference)
-26. [Final Mental Model](#final-mental-model)
-27. [Part of the VynOps Suite](#part-of-the-vynops-suite)
-28. [License](#license)
+10. [Connect A Repository](#connect-a-repository)
+11. [Native Pipelines](#native-pipelines)
+12. [Jenkins CI](#jenkins-ci)
+13. [Jenkins Kubernetes CD](#jenkins-kubernetes-cd)
+14. [Argo CD GitOps Lab Setup](#argo-cd-gitops-lab-setup)
+15. [Kubernetes And k3d](#kubernetes-and-k3d)
+16. [Container Registry](#container-registry)
+17. [Resource Limits](#resource-limits)
+18. [Dashboard Workflows](#dashboard-workflows)
+19. [Settings Guide](#settings-guide)
+20. [Security And Secrets](#security-and-secrets)
+21. [Troubleshooting](#troubleshooting)
+22. [Checklists](#checklists)
+23. [Repository Reference](#repository-reference)
+24. [Final Mental Model](#final-mental-model)
+25. [Part of the VynOps Suite](#part-of-the-vynops-suite)
+26. [License](#license)
 
 ---
 
@@ -149,12 +147,12 @@ They use synthetic temporary storage and do not access application data or integ
 
 Keep host, application, Jenkins, and Kubernetes identities separate.
 
-### `ubuntu`
+### `<SSH_USER>`
 
 Deployment operator account. It may use `sudo` for controlled host administration:
 
 - Copy changed files to the server.
-- Install files into `/home/vyncicd/vyncicd`.
+- Install files into `<APP_DIRECTORY>`.
 - Run the VynCICD build as `vyncicd`.
 - Restart and save PM2 as `vyncicd`.
 - Inspect Docker and Kubernetes when required.
@@ -164,14 +162,14 @@ Deployment operator account. It may use `sudo` for controlled host administratio
 Owns and runs VynCICD:
 
 ```text
-/home/vyncicd/vyncicd
+<APP_DIRECTORY>
 ```
 
 Run application commands as:
 
 ```bash
 sudo -u vyncicd -H bash
-cd /home/vyncicd/vyncicd
+cd <APP_DIRECTORY>
 ```
 
 ### `labcicd`
@@ -179,7 +177,7 @@ cd /home/vyncicd/vyncicd
 Owns the Jenkins test environment:
 
 ```text
-/home/labcicd/jenkins
+<JENKINS_DIRECTORY>
 ```
 
 Jenkins itself runs inside its container as the image-native `jenkins` user. The host Compose project and Jenkins data remain under `labcicd`.
@@ -238,30 +236,29 @@ VynCICD dashboard
 
 ## Server Reference
 
-Reference installation:
+Use your own installation values in place of these placeholders:
 
-```text
-Host: ubuntu@92.4.75.193
-VynCICD user: vyncicd
-VynCICD path: /home/vyncicd/vyncicd
-VynCICD PM2 name: vyncicd
-Jenkins user: labcicd
-Jenkins path: /home/labcicd/jenkins
-Jenkins URL: http://92.4.75.193:8080
-VynCICD URL: http://92.4.75.193:3050
-Registry: http://localhost:5050
-k3d cluster: cicd / kubectl context k3d-cicd
-```
-
-Replace these values for another server. Never copy real passwords or tokens into this README.
+| Setting | Placeholder or example |
+|---|---|
+| SSH host | `<SSH_USER>@<SERVER_HOST>` |
+| Application user | `<APP_USER>` |
+| Application directory | `<APP_DIRECTORY>` |
+| PM2 process name | `<PM2_PROCESS_NAME>` |
+| Jenkins user | `<JENKINS_USER>` |
+| Jenkins directory | `<JENKINS_DIRECTORY>` |
+| Jenkins URL | `https://<JENKINS_HOST>` |
+| VynCICD URL | `https://<VYNCICD_HOST>` |
+| Local registry example | `http://localhost:5050` |
+| Kubernetes context | `<KUBECONFIG_CONTEXT>` |
 
 Connect from Windows PowerShell:
 
 ```powershell
-ssh -i "D:\Help\ssh-key-2026-07-18.key" ubuntu@92.4.75.193
+ssh -i "<SSH_KEY_PATH>" <SSH_USER>@<SERVER_HOST>
 ```
 
-The server is production-like. Do not run deployment commands unless deployment was explicitly approved.
+Replace placeholders before running commands. Keep actual host addresses,
+operator identities, private-key paths, passwords, and tokens out of this README.
 
 ---
 
@@ -385,7 +382,7 @@ npm run dev
 Run as `vyncicd`:
 
 ```bash
-cd /home/vyncicd/vyncicd
+cd <APP_DIRECTORY>
 npm install
 npm run build
 pm2 start npm --name vyncicd -- start
@@ -412,7 +409,7 @@ curl -I http://127.0.0.1:3050
 Native pipelines require the separate runner:
 
 ```bash
-cd /home/vyncicd/vyncicd
+cd <APP_DIRECTORY>
 node src/agent/runner.mjs
 ```
 
@@ -425,121 +422,6 @@ pm2 logs vyncicd-runner --lines 100
 ```
 
 The runner is not required for Jenkinsfile pipelines. Jenkins executes those runs.
-
----
-
-## Production Deployment
-
-This procedure deploys only explicitly changed files. Never copy the full project, `node_modules`, `.next`, `.env.local`, or runtime data.
-
-### 1. Check local changes
-
-```powershell
-git status --short
-git diff --name-only
-```
-
-Review every file before transfer.
-
-### 2. Transfer a changed file
-
-```powershell
-$key = "D:\Help\ssh-key-2026-07-18.key"
-scp -i $key src/lib/jenkins.ts ubuntu@92.4.75.193:/tmp/jenkins.ts
-```
-
-### 3. Verify SHA-256
-
-Local:
-
-```powershell
-Get-FileHash src/lib/jenkins.ts -Algorithm SHA256
-```
-
-Server:
-
-```bash
-sha256sum /tmp/jenkins.ts
-```
-
-Stop if hashes differ.
-
-### 4. Install as `vyncicd`
-
-```bash
-sudo cp /tmp/jenkins.ts /home/vyncicd/vyncicd/src/lib/jenkins.ts
-sudo chown vyncicd:vyncicd /home/vyncicd/vyncicd/src/lib/jenkins.ts
-rm -f /tmp/jenkins.ts
-```
-
-### 5. Build before restart
-
-```bash
-sudo -u vyncicd -H bash
-cd /home/vyncicd/vyncicd
-npm install
-npm run build
-```
-
-If the build fails, do not restart PM2.
-
-For stale generated output:
-
-```bash
-rm -rf .next
-npm run build
-```
-
-Never delete `data/` during a build repair.
-
-### 6. Restart and verify
-
-```bash
-pm2 restart vyncicd
-pm2 save
-pm2 list
-```
-
-Expected:
-
-```text
-vyncicd  online
-```
-
----
-
-## Back Up And Restore
-
-### VynCICD data
-
-```bash
-tar -czf /tmp/vyncicd-data-$(date +%Y%m%d%H%M%S).tar.gz \
-  -C /home/vyncicd/vyncicd data
-```
-
-Move the archive to protected backup storage. Do not leave long-lived backups in `/tmp`.
-
-### Jenkins home
-
-```bash
-tar -czf /tmp/jenkins-home-$(date +%Y%m%d%H%M%S).tar.gz \
-  -C /home/labcicd/jenkins home
-```
-
-Protect this archive: it contains Jenkins configuration, job history, and credential metadata.
-
-### Restore
-
-Stop before restoring:
-
-```bash
-pm2 stop vyncicd
-tar -xzf /path/to/vyncicd-data-backup.tar.gz -C /home/vyncicd/vyncicd
-chown -R vyncicd:vyncicd /home/vyncicd/vyncicd/data
-pm2 start vyncicd
-```
-
-Take a fresh backup before overwriting current state.
 
 ---
 
@@ -632,9 +514,9 @@ Reference setup:
 
 ```text
 Host account: labcicd
-Directory: /home/labcicd/jenkins
+Directory: <JENKINS_DIRECTORY>
 Container: labcicd-jenkins
-Web: http://92.4.75.193:8080
+Web: http://<SERVER_HOST>:8080
 CPU limit: 0.25 CPU
 Memory limit: 768 MiB
 Swap ceiling: 768 MiB
@@ -649,7 +531,7 @@ Jenkins runs as the image-native `jenkins` user. Do not force `user: "1008:1008"
 2. Retrieve the one-time password:
 
    ```bash
-   sudo cat /home/labcicd/jenkins/home/secrets/initialAdminPassword
+   sudo cat <JENKINS_DIRECTORY>/home/secrets/initialAdminPassword
    ```
 
 3. Choose **Install suggested plugins**.
@@ -788,7 +670,7 @@ no
 Retrieve it only on the server terminal:
 
 ```bash
-sudo cat /home/labcicd/jenkins/k8s-cd-test-token
+sudo cat <JENKINS_DIRECTORY>/k8s-cd-test-token
 ```
 
 In Jenkins:
@@ -899,7 +781,7 @@ ServiceAccount, Role, and RoleBinding may need to be recreated:
 k3d kubeconfig get cicd > /tmp/cicd-live.yaml
 
 kubectl --kubeconfig /tmp/cicd-live.yaml \
-  apply -f /home/labcicd/jenkins/rbac.yaml
+  apply -f <JENKINS_DIRECTORY>/rbac.yaml
 ```
 
 Reapply namespace resource limits when required:
@@ -923,8 +805,8 @@ kubectl --kubeconfig /tmp/cicd-live.yaml \
 Never commit or publish these files:
 
 ```text
-/home/labcicd/jenkins/home/
-/home/labcicd/jenkins/k8s-cd-test-token
+<JENKINS_DIRECTORY>/home/
+<JENKINS_DIRECTORY>/k8s-cd-test-token
 /tmp/jenkins-cd-test-token-new
 ```
 
@@ -1088,9 +970,9 @@ still running and the `curl` checks succeed.
 For browser access from Windows, tunnel the server port-forward over SSH:
 
 ```powershell
-ssh -i "D:\Help\ssh-key-2026-07-18.key" `
+ssh -i "<SSH_KEY_PATH>" `
   -L 8081:127.0.0.1:8081 `
-  ubuntu@92.4.75.193
+  <SSH_USER>@<SERVER_HOST>
 ```
 
 Open `https://127.0.0.1:8081` and accept the self-signed lab certificate.
@@ -1173,7 +1055,7 @@ Use the Gitea IP on the `k3d-cicd` network in Argo CD, not `http://gitea:3000`.
 The tested GitOps repository is:
 
 ```text
-http://172.20.0.8:3000/labadmin/argocd-gitops.git
+http://<HOST_IP>:3000/labadmin/argocd-gitops.git
 ```
 
 The IP can change if the container is recreated; recheck the Docker network IP
@@ -1287,7 +1169,7 @@ Inspect a VynCICD Argo run without exposing secrets:
 ```bash
 python3 - <<'PY'
 import json
-runs = json.load(open('/home/vyncicd/vyncicd/data/runs.json'))
+runs = json.load(open('<APP_DIRECTORY>/data/runs.json'))
 for run in runs[:20]:
     if run.get('executionMode') == 'argocd':
         print({k: run.get(k) for k in (
@@ -1569,10 +1451,10 @@ Never expose:
 Check presence without printing values:
 
 ```bash
-test -s /home/labcicd/jenkins/k8s-cd-test-token && echo token-present
+test -s <JENKINS_DIRECTORY>/k8s-cd-test-token && echo token-present
 python3 - <<'PY'
 import json
-p='/home/vyncicd/vyncicd/data/settings.json'
+p='<APP_DIRECTORY>/data/settings.json'
 s=json.load(open(p))
 for key in ('k8sToken','jenkinsApiToken','registryPassword'):
     print(key + '_present=' + str(bool(str(s.get(key,'' )).strip())).lower())
@@ -1599,7 +1481,7 @@ Jenkins baseline:
 ```bash
 pm2 status
 pm2 logs vyncicd --lines 200
-cd /home/vyncicd/vyncicd
+cd <APP_DIRECTORY>
 npm run build
 ```
 
@@ -1628,7 +1510,7 @@ Remove VynCICD optional parameters or define matching Jenkins job parameters. An
 ```bash
 python3 - <<'PY'
 import json
-runs=json.load(open('/home/vyncicd/vyncicd/data/runs.json'))
+runs=json.load(open('<APP_DIRECTORY>/data/runs.json'))
 for r in runs[:20]:
     if r.get('executionMode') == 'jenkinsfile':
         print({k:r.get(k) for k in ('id','status','jenkinsQueueUrl','jenkinsBuildNumber','jenkinsBuildUrl','error')})
@@ -1788,7 +1670,7 @@ VynCICD dashboard
 Operating principles:
 
 1. Keep execution ownership clear: native or Jenkins, never both.
-2. Keep host identities separate: `ubuntu`, `vyncicd`, `labcicd`, and `jenkins`.
+2. Keep host identities separate: `<SSH_USER>`, `vyncicd`, `labcicd`, and `jenkins`.
 3. Use least-privilege Kubernetes ServiceAccounts.
 4. Use hard resource limits for test environments.
 5. Build images for the actual node architecture.
