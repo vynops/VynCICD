@@ -1,13 +1,15 @@
 'use client'
 
 import useSWR from 'swr'
+import { useEffect, useState } from 'react'
 import { CheckCircle, XCircle, Clock, GitBranch, Rocket, Shield, AlertTriangle, TrendingUp, TrendingDown, Activity, RefreshCw, ArrowUpRight } from 'lucide-react'
 import { timeAgo, duration, cn } from '@/lib/utils'
 import Link from 'next/link'
 import type { PipelineRun, Deployment } from '@/lib/data-store'
 import type { Incident } from '@/lib/oncall-store'
+import { fetchList } from '@/lib/fetch-json'
+import { fetchAnalyticsSummary, type DoraSummary } from '@/lib/analytics-client'
 
-const fetcher = (url: string) => fetch(url).then(r => r.json())
 
 const STATUS_ICON: Record<string, React.ReactNode> = {
   success:   <CheckCircle  className="w-3.5 h-3.5 text-emerald-400" />,
@@ -45,16 +47,30 @@ function StatCard({ label, value, sub, trend, color, href }: { label: string; va
 }
 
 export default function OverviewPage() {
-  const { data: runs = [] }         = useSWR<PipelineRun[]>('/api/runs?limit=20', fetcher, { refreshInterval: 30000 })
-  const { data: deployments = [] }  = useSWR<Deployment[]>('/api/deployments?limit=10', fetcher, { refreshInterval: 30000 })
-  const { data: incidents = [] }    = useSWR<Incident[]>('/api/incidents', fetcher, { refreshInterval: 30000 })
-  const { data: analytics }         = useSWR('/api/analytics/summary', fetcher, { refreshInterval: 60000 })
+  const runState = useSWR<PipelineRun[]>('/api/runs?limit=500', fetchList, { refreshInterval: 30000 })
+  const deploymentState = useSWR<Deployment[]>('/api/deployments?limit=500', fetchList, { refreshInterval: 30000 })
+  const incidentState = useSWR<Incident[]>('/api/incidents', fetchList, { refreshInterval: 30000 })
+  const analyticsState = useSWR<DoraSummary>('/api/analytics/summary', fetchAnalyticsSummary, { refreshInterval: 60000 })
+  const runs = runState.data ?? []
+  const deployments = deploymentState.data ?? []
+  const incidents = incidentState.data ?? []
+  const analytics = analyticsState.data
+  const [from, setFrom] = useState<string | null>(null)
+  useEffect(() => {
+    const refreshWindow = () => setFrom(new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
+    refreshWindow()
+    const timer = window.setInterval(refreshWindow, 30000)
+    return () => window.clearInterval(timer)
+  }, [])
+  const runScope = from ? `/runs?from=${encodeURIComponent(from)}` : '/runs'
+  const recentRuns = from ? runs.filter(run => Date.parse(run.startedAt) >= Date.parse(from)) : []
+  const completedRuns = recentRuns.filter(run => run.status === 'success' || run.status === 'failed')
 
-  const total   = runs.length
-  const passed  = runs.filter(r => r.status === 'success').length
-  const failed  = runs.filter(r => r.status === 'failed').length
-  const running = runs.filter(r => r.status === 'running').length
-  const successRate = total > 0 ? Math.round((passed / total) * 100) : 0
+  const total   = recentRuns.length
+  const passed  = completedRuns.filter(r => r.status === 'success').length
+  const failed  = recentRuns.filter(r => r.status === 'failed').length
+  const running = recentRuns.filter(r => r.status === 'running').length
+  const successRate = completedRuns.length > 0 ? Math.round((passed / completedRuns.length) * 100) : null
 
   const openIncidents = incidents.filter(i => i.status !== 'resolved')
   const targets = analytics?.targets ?? {
@@ -66,14 +82,17 @@ export default function OverviewPage() {
 
   return (
     <div className="space-y-6 max-w-screen-2xl">
+      {[{ label: 'runs', error: runState.error }, { label: 'deployments', error: deploymentState.error }, { label: 'incidents', error: incidentState.error }, { label: 'analytics', error: analyticsState.error }].map(state =>
+        state.error ? <p key={state.label} role="alert" className="text-sm text-red-400">Unable to load {state.label}. Refresh to retry; displayed data may be stale.</p> : null
+      )}
       {/* Stats row */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        <StatCard label="Runs (24h)" value={total} sub={`${running} running`} color="text-white" href="/runs" />
-        <StatCard label="Success Rate" value={`${successRate}%`} sub="last 20 runs" trend={successRate >= 80 ? 'up' : 'down'} color={successRate >= 80 ? 'text-emerald-400' : 'text-red-400'} href="/runs" />
-        <StatCard label="Failed Runs" value={failed} sub="need attention" trend={failed > 0 ? 'down' : 'neutral'} color={failed > 0 ? 'text-red-400' : 'text-emerald-400'} href="/runs" />
-        <StatCard label="Deployments" value={deployments.length} sub="total tracked" color="text-white" href="/deployments" />
-        <StatCard label="Open Incidents" value={openIncidents.length} sub={openIncidents.filter(i => i.severity === 'critical').length + ' critical'} trend={openIncidents.length > 0 ? 'down' : 'neutral'} color={openIncidents.length > 0 ? 'text-orange-400' : 'text-emerald-400'} href="/incidents" />
-        <StatCard label="Dep. Freq." value={analytics?.deployFrequency ?? '—'} sub="per week" trend="up" color="text-emerald-400" href="/analytics" />
+        <StatCard label="Runs (24h)" value={runState.data && from ? total : '-'} sub={`${running} running · retained history`} color="text-white" href={runScope} />
+        <StatCard label="Success Rate" value={runState.data && from && successRate !== null ? `${successRate}%` : '-'} sub="completed runs · 24h" color={successRate === null ? 'text-slate-500' : successRate >= 80 ? 'text-emerald-400' : 'text-red-400'} href={`${runScope}${from ? '&' : '?'}status=completed`} />
+        <StatCard label="Failed Runs" value={runState.data && from ? failed : '-'} sub="last 24h" color={failed > 0 ? 'text-red-400' : 'text-white'} href={`${runScope}${from ? '&' : '?'}status=failed`} />
+        <StatCard label="Deployments" value={deploymentState.data ? deployments.length : '-'} sub="up to 500 retained" color="text-white" href="/deployments" />
+        <StatCard label="Open Incidents" value={incidentState.data ? openIncidents.length : '-'} sub={openIncidents.filter(i => i.severity === 'critical').length + ' critical'} color={openIncidents.length > 0 ? 'text-orange-400' : 'text-white'} href="/incidents?status=open" />
+        <StatCard label="Dep. Freq." value={analytics?.deployFrequency ?? '—'} sub="tracked records/week" color={analytics && analytics.deployFrequency >= targets.deploymentFrequency ? 'text-emerald-400' : 'text-slate-400'} href="/analytics" />
       </div>
 
       {/* DORA snapshot */}
@@ -89,16 +108,16 @@ export default function OverviewPage() {
           </div>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             {[
-              { label: 'Deployment Frequency', value: `${analytics.deployFrequency}/wk`, status: analytics.deployFrequency >= targets.deploymentFrequency ? 'On target' : 'Below target', color: analytics.deployFrequency >= targets.deploymentFrequency ? 'text-emerald-400' : 'text-orange-400' },
-              { label: 'Lead Time for Changes', value: `${analytics.leadTimeHours}h`, status: analytics.leadTimeHours <= targets.leadTimeHours ? 'On target' : 'Above target', color: analytics.leadTimeHours <= targets.leadTimeHours ? 'text-emerald-400' : 'text-orange-400' },
+              { label: 'Tracked Deployment Frequency', value: `${analytics.deployFrequency}/wk`, status: analytics.deployFrequency >= targets.deploymentFrequency ? 'On target' : 'Below target', color: analytics.deployFrequency >= targets.deploymentFrequency ? 'text-emerald-400' : 'text-orange-400' },
+              { label: 'Build Duration (lead-time proxy)', value: analytics.sampleCounts.successfulRuns ? `${analytics.leadTimeHours}h` : '-', status: !analytics.sampleCounts.successfulRuns ? 'No data' : analytics.leadTimeHours <= targets.leadTimeHours ? 'On target' : 'Above target', color: !analytics.sampleCounts.successfulRuns ? 'text-slate-500' : analytics.leadTimeHours <= targets.leadTimeHours ? 'text-emerald-400' : 'text-orange-400' },
               { label: 'MTTR', value: analytics.mttrMinutes != null ? `${analytics.mttrMinutes}min` : '—', status: analytics.mttrMinutes == null ? 'No data' : analytics.mttrMinutes <= targets.mttrMinutes ? 'On target' : 'Above target', color: analytics.mttrMinutes == null ? 'text-slate-500' : analytics.mttrMinutes <= targets.mttrMinutes ? 'text-emerald-400' : 'text-orange-400' },
-              { label: 'Change Failure Rate', value: `${analytics.changeFailureRate}%`, status: analytics.changeFailureRate <= targets.changeFailureRate ? 'On target' : 'Above target', color: analytics.changeFailureRate <= targets.changeFailureRate ? 'text-emerald-400' : 'text-orange-400' },
+              { label: 'Run Failure Rate (change-failure proxy)', value: analytics.sampleCounts.completedRuns ? `${analytics.changeFailureRate}%` : '-', status: !analytics.sampleCounts.completedRuns ? 'No data' : analytics.changeFailureRate <= targets.changeFailureRate ? 'On target' : 'Above target', color: !analytics.sampleCounts.completedRuns ? 'text-slate-500' : analytics.changeFailureRate <= targets.changeFailureRate ? 'text-emerald-400' : 'text-orange-400' },
             ].map(m => (
-              <div key={m.label} className="space-y-1">
+              <Link href="/analytics" key={m.label} className="space-y-1 block hover:bg-slate-800/30 rounded-lg">
                 <div className="text-xs text-slate-500">{m.label}</div>
                 <div className={cn('text-xl font-black', m.color)}>{m.value}</div>
                 <div className={cn('text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full inline-block', m.color, 'bg-current/10 opacity-80')}>{m.status}</div>
-              </div>
+              </Link>
             ))}
           </div>
         </div>
@@ -118,7 +137,7 @@ export default function OverviewPage() {
           </div>
           <div className="divide-y divide-slate-800/40">
             {runs.slice(0, 7).map(run => (
-              <div key={run.id} className="px-4 py-3 flex items-center gap-3 hover:bg-slate-800/20 transition-colors">
+              <Link href={`/runs?runId=${encodeURIComponent(run.id)}`} key={run.id} className="px-4 py-3 flex items-center gap-3 hover:bg-slate-800/20 transition-colors">
                 <div className="flex-shrink-0">{STATUS_ICON[run.status] ?? STATUS_ICON.pending}</div>
                 <div className="flex-1 min-w-0">
                   <div className="text-xs font-medium text-white truncate">{run.repoFullName}</div>
@@ -129,10 +148,10 @@ export default function OverviewPage() {
                   <div className="text-[10px] text-slate-600 mt-0.5">{run.durationMs ? duration(run.durationMs) : ''}</div>
                 </div>
                 <div className="text-[10px] text-slate-600 flex-shrink-0 w-14 text-right">{timeAgo(run.startedAt)}</div>
-              </div>
+              </Link>
             ))}
-            {runs.length === 0 && (
-              <div className="px-4 py-8 text-center text-sm text-slate-600">No runs yet. Connect a repository to get started.</div>
+            {!runState.error && runs.length === 0 && (
+              <div className="px-4 py-8 text-center text-sm text-slate-600">{runState.isLoading ? 'Loading runs...' : <Link href="/repositories">No runs yet. Connect a repository to get started.</Link>}</div>
             )}
           </div>
         </div>
@@ -150,17 +169,17 @@ export default function OverviewPage() {
           </div>
           <div className="divide-y divide-slate-800/40">
             {deployments.slice(0, 6).map(d => (
-              <div key={d.id} className="px-4 py-3 flex items-center gap-3 hover:bg-slate-800/20 transition-colors">
+              <Link href={`/deployments?deploymentId=${encodeURIComponent(d.id)}`} key={d.id} className="px-4 py-3 flex items-center gap-3 hover:bg-slate-800/20 transition-colors">
                 <div className={cn('w-2 h-2 rounded-full flex-shrink-0', d.status === 'healthy' ? 'bg-emerald-400' : d.status === 'failed' ? 'bg-red-400' : 'bg-yellow-400')} />
                 <div className="flex-1 min-w-0">
                   <div className="text-xs font-medium text-white truncate">{d.repoFullName}</div>
                   <div className="text-[10px] text-slate-500 truncate">{d.environment} · {d.version} · by {d.author}</div>
                 </div>
                 <div className="text-[10px] text-slate-600 flex-shrink-0">{timeAgo(d.deployedAt)}</div>
-              </div>
+              </Link>
             ))}
-            {deployments.length === 0 && (
-              <div className="px-4 py-8 text-center text-sm text-slate-600">No deployments yet.</div>
+            {!deploymentState.error && deployments.length === 0 && (
+              <div className="px-4 py-8 text-center text-sm text-slate-600">{deploymentState.isLoading ? 'Loading deployments...' : <Link href="/pipelines">No deployments yet. Configure a deployment pipeline.</Link>}</div>
             )}
           </div>
         </div>
@@ -178,11 +197,11 @@ export default function OverviewPage() {
           </div>
           <div className="space-y-2">
             {openIncidents.slice(0, 3).map(inc => (
-              <div key={inc.id} className="flex items-center gap-3 text-xs">
+              <Link href={`/incidents?incidentId=${encodeURIComponent(inc.id)}`} key={inc.id} className="flex items-center gap-3 text-xs hover:text-white">
                 <span className={cn('font-bold uppercase px-1.5 py-0.5 rounded text-[10px]', inc.severity === 'critical' ? 'bg-red-500/20 text-red-400' : inc.severity === 'high' ? 'bg-orange-500/20 text-orange-400' : 'bg-yellow-500/20 text-yellow-400')}>{inc.severity}</span>
                 <span className="text-slate-300 truncate">{inc.title}</span>
                 <span className="text-slate-600 ml-auto flex-shrink-0">{timeAgo(inc.createdAt)}</span>
-              </div>
+              </Link>
             ))}
           </div>
         </div>

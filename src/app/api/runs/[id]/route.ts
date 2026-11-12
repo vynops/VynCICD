@@ -3,12 +3,13 @@ import { loadRuns, updateRun, loadEnvironments, type PipelineRunStatus } from '@
 import { createIncident, loadIncidents } from '@/lib/oncall-store'
 import { getSettings } from '@/lib/settings-store'
 import { notifyBuildFailed, notifyBuildSucceeded, notifyIncidentOpened } from '@/lib/notifier'
+import { requireRole } from '@/lib/auth'
 
 const RUNNER_SECRET = process.env.RUNNER_SECRET ?? process.env.VYNCICD_SECRET ?? ''
 
 function authRunner(req: NextRequest): boolean {
   const token = req.headers.get('x-runner-token') ?? ''
-  return !RUNNER_SECRET || token === RUNNER_SECRET
+  return Boolean(RUNNER_SECRET) && token === RUNNER_SECRET
 }
 
 function recipientsFromSettings(): string[] {
@@ -25,6 +26,10 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  if (!authRunner(req)) {
+    const auth = await requireRole(req, 'viewer')
+    if (auth instanceof NextResponse) return auth
+  }
   const { id } = await params
   const runs = loadRuns()
   const run = runs.find(r => r.id === id)

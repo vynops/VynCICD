@@ -14,6 +14,8 @@ export interface User {
   createdAt: string
   active: boolean
   lastLogin?: string
+  mustChangePassword: boolean
+  sessionVersion: number
 }
 
 const DATA_DIR = path.join(process.cwd(), 'data')
@@ -27,8 +29,19 @@ function readUsers(): User[] {
   ensureDir()
   if (!fs.existsSync(USERS_FILE)) return []
   try {
-    return (JSON.parse(fs.readFileSync(USERS_FILE, 'utf8')) as User[]).map(user => ({ ...user, active: user.active !== false }))
-  } catch { return [] }
+    return (JSON.parse(fs.readFileSync(USERS_FILE, 'utf8')) as User[]).map(user => ({
+      ...user,
+      active: user.active !== false,
+      mustChangePassword: user.mustChangePassword ?? (
+        user.role === 'admin' && user.email.toLowerCase() === 'admin@vyncicd.local'
+        && verifyPassword('changeme', user.passwordHash, user.passwordSalt)
+      ),
+      sessionVersion: user.sessionVersion ?? 0,
+    }))
+  } catch (error) {
+    console.error('[auth] Unable to read user storage')
+    throw error
+  }
 }
 
 function writeUsers(users: User[]) {
@@ -70,6 +83,8 @@ export function createUser(data: { email: string; name: string; role: UserRole; 
     passwordSalt: salt,
     createdAt: new Date().toISOString(),
     active: true,
+    mustChangePassword: false,
+    sessionVersion: 0,
   }
   users.push(user)
   writeUsers(users)
@@ -91,9 +106,37 @@ export function updateUser(id: string, updates: Partial<Pick<User, 'name' | 'rol
     const { hash, salt } = hashPassword(updates.password)
     users[idx].passwordHash = hash
     users[idx].passwordSalt = salt
+    users[idx].sessionVersion += 1
   }
   writeUsers(users)
   return users[idx]
+}
+
+export function changeInitialPassword(
+  id: string, currentPassword: string, newPassword: string, sessionVersion: number
+): { ok: true; user: User } | { ok: false; error: string } {
+  const users = readUsers()
+  const user = users.find(u => u.id === id)
+  if (!user?.active || user.sessionVersion !== sessionVersion) {
+    return { ok: false, error: 'Your session has expired. Please sign in again.' }
+  }
+  if (!user.mustChangePassword) return { ok: false, error: 'An initial password change is not required.' }
+  if (!verifyPassword(currentPassword, user.passwordHash, user.passwordSalt)) {
+    return { ok: false, error: 'Current password is incorrect.' }
+  }
+  if (newPassword.trim().length < 8 || newPassword.length > 128) {
+    return { ok: false, error: 'Choose a password between 8 and 128 characters.' }
+  }
+  if (newPassword === 'changeme' || verifyPassword(newPassword, user.passwordHash, user.passwordSalt)) {
+    return { ok: false, error: 'Choose a different password from the initial password.' }
+  }
+  const { hash, salt } = hashPassword(newPassword)
+  user.passwordHash = hash
+  user.passwordSalt = salt
+  user.mustChangePassword = false
+  user.sessionVersion += 1
+  writeUsers(users)
+  return { ok: true, user }
 }
 
 export function deleteUser(id: string): void {
@@ -121,6 +164,8 @@ export function seedDefaultAdmin(): void {
     passwordSalt: salt,
     createdAt: new Date().toISOString(),
     active: true,
+    mustChangePassword: true,
+    sessionVersion: 0,
   }
   writeUsers([admin])
 }

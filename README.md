@@ -1,20 +1,8 @@
-<div align="center">
-
 # VynCICD
 
 **A self-hosted CI/CD control plane for native pipelines, Jenkinsfile execution, Kubernetes delivery, security scanning, notifications, AI triage, and DORA metrics.**
 
-Connect your repositories, define pipelines in YAML, deploy to Kubernetes, and let the AI explain every failure — all in a single open-source platform you own and run.
-
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=nextdotjs)](https://nextjs.org)
-[![Node.js](https://img.shields.io/badge/Node.js-18%2B-green?logo=nodedotjs)](https://nodejs.org)
-[![GitHub](https://img.shields.io/badge/GitHub-vynops%2FVynCICD-181717?logo=github)](https://github.com/vynops/VynCICD)
-[![Part of VynOps Suite](https://img.shields.io/badge/VynOps-Suite-06b6d4)](https://github.com/vynops)
-
 VynCICD gives teams one place to connect repositories, define or trigger pipelines, inspect runs, track deployments, manage incidents, and compare engineering performance.
-
-</div>
 
 ```text
 Native pipeline:
@@ -26,58 +14,7 @@ Jenkinsfile pipeline:
 
 VynCICD is the control plane and dashboard. The selected execution engine owns the actual work.
 
-
-
 ---
-
-## Screenshots
-
-| 01 · Login & First-Time Setup | 02 · Overview Dashboard |
-| :---: | :---: |
-| <a href="screenshots/Screenshot%202026-09-01%20133059.png"><img src="screenshots/Screenshot%202026-09-01%20133059.png" alt="Login & First-Time Setup" width="100%" /></a> | <a href="screenshots/Screenshot%202026-09-01%20133243.png"><img src="screenshots/Screenshot%202026-09-01%20133243.png" alt="Overview Dashboard" width="100%" /></a> |
-
-| 03 · Pipeline Catalog | 04 · Jenkins Pipeline Creation |
-| :---: | :---: |
-| <a href="screenshots/Screenshot%202026-09-01%20133312.png"><img src="screenshots/Screenshot%202026-09-01%20133312.png" alt="Pipeline Catalog" width="100%" /></a> | <a href="screenshots/Screenshot%202026-09-01%20133940.png"><img src="screenshots/Screenshot%202026-09-01%20133940.png" alt="Jenkins Pipeline Creation" width="100%" /></a> |
-
-| 05 · Argo CD Pipeline Creation | 06 · Pipeline Runs |
-| :---: | :---: |
-| <a href="screenshots/Screenshot%202026-09-01%20134002.png"><img src="screenshots/Screenshot%202026-09-01%20134002.png" alt="Argo CD Pipeline Creation" width="100%" /></a> | <a href="screenshots/Screenshot%202026-09-01%20134159.png"><img src="screenshots/Screenshot%202026-09-01%20134159.png" alt="Pipeline Runs" width="100%" /></a> |
-
-| 07 · Argo CD Run Detail | 08 · Jenkins Run Detail |
-| :---: | :---: |
-| <a href="screenshots/Screenshot%202026-09-01%20134242.png"><img src="screenshots/Screenshot%202026-09-01%20134242.png" alt="Argo CD Run Detail" width="100%" /></a> | <a href="screenshots/Screenshot%202026-09-01%20134313.png"><img src="screenshots/Screenshot%202026-09-01%20134313.png" alt="Jenkins Run Detail" width="100%" /></a> |
-
-| 09 · Repositories | 10 · Environments |
-| :---: | :---: |
-| <a href="screenshots/Screenshot%202026-09-01%20134334.png"><img src="screenshots/Screenshot%202026-09-01%20134334.png" alt="Repositories" width="100%" /></a> | <a href="screenshots/Screenshot%202026-09-01%20134402.png"><img src="screenshots/Screenshot%202026-09-01%20134402.png" alt="Environments" width="100%" /></a> |
-
-| 11 · Deployments | 12 · Security Scans |
-| :---: | :---: |
-| <a href="screenshots/Screenshot%202026-09-01%20134441.png"><img src="screenshots/Screenshot%202026-09-01%20134441.png" alt="Deployments" width="100%" /></a> | <a href="screenshots/Screenshot%202026-09-01%20134621.png"><img src="screenshots/Screenshot%202026-09-01%20134621.png" alt="Security Scans" width="100%" /></a> |
-
-| 13 · Analytics & DORA | 14 · Incidents |
-| :---: | :---: |
-| <a href="screenshots/Screenshot%202026-09-01%20134646.png"><img src="screenshots/Screenshot%202026-09-01%20134646.png" alt="Analytics & DORA" width="100%" /></a> | <a href="screenshots/Screenshot%202026-09-01%20134715.png"><img src="screenshots/Screenshot%202026-09-01%20134715.png" alt="Incidents" width="100%" /></a> |
-
-| 15 · On-Call | 16 · Routing & Escalations |
-| :---: | :---: |
-| <a href="screenshots/Screenshot%202026-09-01%20134754.png"><img src="screenshots/Screenshot%202026-09-01%20134754.png" alt="On-Call" width="100%" /></a> | <a href="screenshots/Screenshot%202026-09-01%20134814.png"><img src="screenshots/Screenshot%202026-09-01%20134814.png" alt="Routing & Escalations" width="100%" /></a> |
-
-| 17 · AI Copilot | 18 · Settings & Integrations |
-| :---: | :---: |
-| <a href="screenshots/Screenshot%202026-09-01%20134834.png"><img src="screenshots/Screenshot%202026-09-01%20134834.png" alt="AI Copilot" width="100%" /></a> | <a href="screenshots/Screenshot%202026-09-01%20134859.png"><img src="screenshots/Screenshot%202026-09-01%20134859.png" alt="Settings & Integrations" width="100%" /></a> |
-
-| 19 · Team & Roles | 20 · Native Pipeline Stages |
-| :---: | :---: |
-| <a href="screenshots/Screenshot%202026-09-01%20134915.png"><img src="screenshots/Screenshot%202026-09-01%20134915.png" alt="Team & Roles" width="100%" /></a> | <a href="screenshots/Screenshot%202026-09-01%20154833.png"><img src="screenshots/Screenshot%202026-09-01%20154833.png" alt="Native Pipeline Stages" width="100%" /></a> |
-
-| 21 · Execution Mode Selector |
-| :---: |
-| <a href="screenshots/Screenshot%202026-09-01%20154954.png"><img src="screenshots/Screenshot%202026-09-01%20154954.png" alt="Execution Mode Selector" width="100%" /></a> |
-
----
-
 
 ## Contents
 
@@ -141,6 +78,23 @@ Do not configure both engines to execute the same pipeline. Pick one owner.
 ---
 
 ## Accounts And Permissions
+
+### First application login
+
+A fresh installation creates `admin@vyncicd.local` with initial password `changeme`
+on the first sign-in attempt. `VYNCICD_ADMIN_EMAIL` and `VYNCICD_ADMIN_PASSWORD`
+can override these initial credentials. The initial administrator must choose a
+different password of 8 to 128 characters before using the dashboard or protected
+APIs. Keep a new installation local or access-restricted until this is complete.
+
+Existing accounts keep their passwords. Legacy default administrators still using
+`changeme` must also change it. Existing sessions require signing in again after
+this update; completing the password change invalidates earlier sessions.
+Runner requests must supply a nonempty configured `RUNNER_SECRET` (or
+`VYNCICD_SECRET`); an arbitrary runner header cannot bypass the password-change gate.
+
+Run the isolated first-login regression checks with `node --test tests/first-login.test.mjs`.
+They use synthetic temporary storage and do not access application data or integrations.
 
 Keep host, application, Jenkins, and Kubernetes identities separate.
 
@@ -797,6 +751,139 @@ Secret: complete token value
 
 Do not put the token in Git, a Jenkinsfile, VynCICD settings, README, or chat.
 
+### Jenkins Kubernetes Token Rotation And Namespace Security
+
+The Jenkins CD ServiceAccount is intentionally restricted to the
+`jenkins-cd-test` namespace. It must not be able to deploy to `production`.
+
+Before adding or rotating the Jenkins credential, verify the permissions with a
+live kubeconfig and token:
+
+```bash
+k3d kubeconfig get cicd > /tmp/cicd-live.yaml
+
+TOKEN="$(cat /tmp/jenkins-cd-test-token-new)"
+API_SERVER="$(kubectl --kubeconfig /tmp/cicd-live.yaml config view \
+  --minify -o jsonpath='{.clusters[0].cluster.server}')"
+
+kubectl \
+  --server="$API_SERVER" \
+  --token="$TOKEN" \
+  --insecure-skip-tls-verify=true \
+  auth can-i create deployments \
+  -n jenkins-cd-test
+```
+
+Expected result:
+
+```text
+yes
+```
+
+Verify that the same token cannot deploy to production:
+
+```bash
+kubectl \
+  --server="$API_SERVER" \
+  --token="$TOKEN" \
+  --insecure-skip-tls-verify=true \
+  auth can-i create deployments \
+  -n production
+```
+
+Expected result:
+
+```text
+no
+```
+
+A direct API check should also return `HTTP 200` for deployments in
+`jenkins-cd-test` and `HTTP 403` for deployments in `production`.
+
+#### Generate A Replacement Token
+
+ServiceAccount tokens created with `kubectl create token` are time-limited.
+Generate a replacement before the current token expires:
+
+```bash
+kubectl --kubeconfig /tmp/cicd-live.yaml \
+  -n jenkins-cd-test \
+  create token jenkins-deployer \
+  --duration=8760h \
+  > /tmp/jenkins-cd-test-token-new
+```
+
+The `8760h` duration is approximately one year. It is not permanent and should
+be rotated periodically.
+
+#### Update Jenkins After Rotation
+
+Updating the token file on the Linux server does not update the Secret Text
+credential already stored inside Jenkins.
+
+After generating and verifying a replacement token:
+
+1. Open Jenkins.
+2. Go to **Manage Jenkins -> Credentials -> System -> Global credentials**.
+3. Open the credential with ID `k8s-cd-test-token`.
+4. Replace its Secret Text value with the complete new token.
+5. Save the credential.
+6. Run the Jenkins Kubernetes CD test again.
+
+After verification, remove temporary credential files:
+
+```bash
+rm -f /tmp/jenkins-cd-test-token-new
+rm -f /tmp/cicd-live.yaml
+rm -f /tmp/production-response
+rm -f /tmp/test-response
+```
+
+#### Reapply RBAC After Cluster Recreation
+
+If the `k3d-cicd` cluster is deleted and recreated, its namespace,
+ServiceAccount, Role, and RoleBinding may need to be recreated:
+
+```bash
+k3d kubeconfig get cicd > /tmp/cicd-live.yaml
+
+kubectl --kubeconfig /tmp/cicd-live.yaml \
+  apply -f /home/labcicd/jenkins/rbac.yaml
+```
+
+Reapply namespace resource limits when required:
+
+```bash
+kubectl --kubeconfig /tmp/cicd-live.yaml \
+  apply -f /root/jenkins-cd-test-resources.yaml
+```
+
+Then verify:
+
+```bash
+kubectl --kubeconfig /tmp/cicd-live.yaml \
+  get namespace jenkins-cd-test
+kubectl --kubeconfig /tmp/cicd-live.yaml \
+  get role,rolebinding -n jenkins-cd-test
+kubectl --kubeconfig /tmp/cicd-live.yaml \
+  get resourcequota,limitrange -n jenkins-cd-test
+```
+
+Never commit or publish these files:
+
+```text
+/home/labcicd/jenkins/home/
+/home/labcicd/jenkins/k8s-cd-test-token
+/tmp/jenkins-cd-test-token-new
+```
+
+Never place a token in a Jenkinsfile, Git repository, VynCICD settings, shell
+history, build log, README, or chat message.
+
+The `jenkins-cd-test` namespace is also protected by Kubernetes `ResourceQuota`
+and `LimitRange` objects. These limit aggregate CPU, memory, pod, service, and
+storage usage. Jenkins does not have permission to modify those limits.
+
 ### CD test pipeline
 
 Use [ops/jenkins-cd/Jenkinsfile](ops/jenkins-cd/Jenkinsfile). It:
@@ -852,6 +939,322 @@ kubectl describe resourcequota jenkins-cd-test-quota \
 ```
 
 Jenkins must not be allowed to edit these controls.
+
+---
+
+## Argo CD GitOps Lab Setup
+
+VynCICD also supports Argo CD as a separate CD execution owner. Argo CD
+reconciles Kubernetes state from Git; VynCICD triggers synchronization and
+polls the application until it is `Synced` and `Healthy`.
+
+```text
+VynCICD -> Argo CD API -> GitOps repository -> Kubernetes
+```
+
+This lab setup intentionally uses only the existing services:
+
+```text
+Kubernetes cluster: k3d-cicd
+Argo namespace:     argocd
+Test namespace:     jenkins-cd-test
+Git service:        existing Gitea
+GitOps repository:  labadmin/argocd-gitops
+Test application:   argocd-nginx-test
+```
+
+### Argo CD resource caps
+
+Argo CD runs in its own namespace with hard resource limits. The current lab
+caps are:
+
+| Component | CPU limit | Memory limit |
+|---|---:|---:|
+| Application controller | `500m` | `512Mi` |
+| Repo server | `250m` | `256Mi` |
+| Argo server | `150m` | `128Mi` |
+| Applicationset controller | `100m` | `128Mi` |
+| Dex server | `100m` | `128Mi` |
+| Redis | `50m` | `64Mi` |
+| Notifications controller | `50m` | `64Mi` |
+
+The `argocd` namespace quota is:
+
+```text
+CPU requests:     500m
+CPU limits:       1.5 CPU
+Memory requests:  1Gi
+Memory limits:    2Gi
+Pods:             12
+Services:         10
+ConfigMaps:       20
+Secrets:          20
+```
+
+Check usage:
+
+```bash
+kubectl --context k3d-cicd -n argocd get pods
+kubectl --context k3d-cicd -n argocd describe resourcequota argocd-quota
+```
+
+Do not increase these limits casually. The server is shared with Jenkins,
+databases, the registry, Gitea, and both k3d clusters.
+
+### Access Argo CD in this lab
+
+Argo CD is intentionally a private `ClusterIP` service. The server-side
+port-forward is not public and must be running for VynCICD to reach Argo CD:
+
+```bash
+nohup kubectl --context k3d-cicd \
+  -n argocd \
+  port-forward \
+  --address 127.0.0.1 \
+  svc/argocd-server \
+  8081:443 \
+  > /tmp/argocd-port-forward.log 2>&1 &
+```
+
+This must be started again after a server reboot. Verify it:
+
+```bash
+pgrep -af "kubectl.*port-forward.*argocd-server"
+curl -skI https://127.0.0.1:8081
+curl -sk https://127.0.0.1:8081/api/version
+```
+
+Expected Argo version response:
+
+```json
+{"Version":"v3.5.1"}
+```
+
+Occasional `broken pipe` messages in the port-forward log usually mean a
+browser or API client closed a connection. They are harmless if the process is
+still running and the `curl` checks succeed.
+
+For browser access from Windows, tunnel the server port-forward over SSH:
+
+```powershell
+ssh -i "D:\Help\ssh-key-2026-07-18.key" `
+  -L 8081:127.0.0.1:8081 `
+  ubuntu@92.4.75.193
+```
+
+Open `https://127.0.0.1:8081` and accept the self-signed lab certificate.
+
+### Create an Argo CD API token
+
+The initial Argo admin password is not an API token. If the CLI is not
+installed, install the ARM64 CLI on the ARM64 server:
+
+```bash
+ARCH=$(uname -m)
+[ "$ARCH" = "aarch64" ] && CLI_ARCH=arm64 || CLI_ARCH=amd64
+curl -fL "https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-${CLI_ARCH}" -o /tmp/argocd
+chmod +x /tmp/argocd
+sudo mv /tmp/argocd /usr/local/bin/argocd
+argocd version --client
+```
+
+Log in through the server-side port-forward:
+
+```bash
+argocd login 127.0.0.1:8081 \
+  --username admin \
+  --password '<initial-admin-password>' \
+  --insecure
+```
+
+If token generation reports that the admin account does not have API-key
+capability, enable it as an administrator:
+
+```bash
+kubectl --context k3d-cicd -n argocd patch configmap argocd-cm \
+  --type merge \
+  -p '{"data":{"accounts.admin":"apiKey, login"}}'
+kubectl --context k3d-cicd -n argocd rollout restart deployment/argocd-server
+kubectl --context k3d-cicd -n argocd rollout status deployment/argocd-server
+```
+
+Log in again and generate a token:
+
+```bash
+argocd login 127.0.0.1:8081 --username admin \
+  --password '<initial-admin-password>' --insecure
+argocd account generate-token
+```
+
+Use the generated token in VynCICD, not the password. A dedicated restricted
+Argo account is preferable beyond this lab.
+
+### VynCICD Argo CD settings
+
+Open **Settings -> Pipeline -> Argo CD** and enter:
+
+```text
+Argo CD URL:   https://127.0.0.1:8081
+Argo CD token: <generated Argo CD API token>
+```
+
+Click **Test connection**. A successful response looks like:
+
+```text
+Connected to Argo CD · v3.5.1
+```
+
+The token is stored masked as `***configured***`. VynCICD accepts the lab’s
+self-signed Argo certificate. The URL is admin-configurable, but ordinary
+viewers must not change it.
+
+### Gitea GitOps repository
+
+Argo CD runs inside Kubernetes, so the Docker name `gitea` is not resolvable by
+Kubernetes DNS. Connect Gitea to the k3d network if needed:
+
+```bash
+sudo docker network connect k3d-cicd gitea
+sudo docker inspect gitea --format '{{json .NetworkSettings.Networks}}'
+```
+
+Use the Gitea IP on the `k3d-cicd` network in Argo CD, not `http://gitea:3000`.
+The tested GitOps repository is:
+
+```text
+http://172.20.0.8:3000/labadmin/argocd-gitops.git
+```
+
+The IP can change if the container is recreated; recheck the Docker network IP
+before repair. For a private repository, add Gitea credentials to Argo CD.
+
+The repository must contain:
+
+```text
+apps/jenkins-cd-test/deployment.yaml
+```
+
+### Argo CD Project and Application
+
+The restricted project is:
+
+```text
+Project: vyncicd-test
+```
+
+It should allow only the GitOps repository, the in-cluster destination, and
+the `jenkins-cd-test` namespace. Do not add `production`.
+
+The tested Application is:
+
+```text
+Application: argocd-nginx-test
+Project:     vyncicd-test
+Revision:    main
+Path:        apps/jenkins-cd-test
+Namespace:   jenkins-cd-test
+```
+
+Expected healthy state:
+
+```text
+Sync:   Synced
+Health: Healthy
+```
+
+If Argo says `app path does not exist`, verify the Git repository and revision:
+
+```bash
+git clone http://127.0.0.1:3300/labadmin/argocd-gitops.git /tmp/argocd-gitops
+cd /tmp/argocd-gitops
+git ls-tree -r --name-only origin/main
+```
+
+The output must include:
+
+```text
+apps/jenkins-cd-test/deployment.yaml
+```
+
+### Test VynCICD Argo CD execution
+
+1. Ensure the server port-forward is running.
+2. Confirm **Test connection** reports `Connected to Argo CD`.
+3. Open **Pipelines -> New Pipeline**.
+4. Select **Argo CD GitOps deployment**.
+5. Enter application `argocd-nginx-test`.
+6. Enter project `vyncicd-test`.
+7. Create the pipeline and click Play.
+8. Open **Runs**.
+
+Expected lifecycle:
+
+```text
+VynCICD run: pending
+Argo sync:  running
+Argo sync:  Synced
+Argo health: Healthy
+VynCICD run: success
+```
+
+The Runs page polls active Argo and Jenkins integrations automatically. It no
+longer requires expanding a run first. A run stores the Argo application,
+sync status, health status, URL, duration, and final result.
+
+Verify Kubernetes:
+
+```bash
+kubectl --context k3d-cicd -n jenkins-cd-test \
+  get deployment argocd-nginx-test
+kubectl --context k3d-cicd -n jenkins-cd-test get pods
+```
+
+Expected:
+
+```text
+argocd-nginx-test   1/1   Running
+```
+
+### Argo CD troubleshooting
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| VynCICD test returns 404 | Wrong version endpoint or missing route | Use `/api/version`; confirm `/api/settings/test-argocd` is in the build |
+| VynCICD test says Network error | Port-forward stopped or TLS rejected | Start `nohup` port-forward; use the self-signed-safe client; test `curl -sk` |
+| Argo UI shows broken pipe | Client closed a port-forward connection | Usually harmless if the forward remains alive |
+| `gitea` DNS not found | Docker name is not Kubernetes DNS | Use Gitea’s IP on `k3d-cicd` or create a stable Service/Endpoints bridge |
+| App path does not exist | Wrong Git path/revision | Ensure `apps/jenkins-cd-test` exists on `main` |
+| Application OutOfSync | Git desired state differs from cluster | Click Sync and inspect the diff |
+| Application Degraded | Workload is unhealthy | Inspect Application events and `kubectl describe pod` |
+| Run remains pending | Old trigger route or stale run | Inspect `data/runs.json`; trigger a new run after deployment |
+| Run remains running | Polling not reached or Argo API unavailable | Refresh Runs; check `argoCdSyncStatus`, `argoCdHealthStatus`, and port-forward |
+| Argo HTTP 401/403 | Invalid token or insufficient Argo permission | Generate a fresh token; verify Argo project/application permissions |
+| Quota exceeded | `argocd` or test namespace cap reached | `kubectl describe resourcequota` before increasing any limit |
+
+Inspect a VynCICD Argo run without exposing secrets:
+
+```bash
+python3 - <<'PY'
+import json
+runs = json.load(open('/home/vyncicd/vyncicd/data/runs.json'))
+for run in runs[:20]:
+    if run.get('executionMode') == 'argocd':
+        print({k: run.get(k) for k in (
+            'id', 'status', 'argoCdApplication', 'argoCdSyncStatus',
+            'argoCdHealthStatus', 'argoCdUrl', 'startedAt', 'finishedAt',
+            'durationMs', 'error')})
+PY
+```
+
+Check port-forward and Argo from the VynCICD host:
+
+```bash
+pgrep -af 'kubectl.*port-forward.*argocd-server'
+curl -sk https://127.0.0.1:8081/api/version
+```
+
+Do not delete Argo applications or raise quotas as a first troubleshooting
+step. Diagnose the status and logs first.
 
 ---
 
@@ -981,9 +1384,44 @@ Kubernetes ResourceQuota limits aggregate namespace usage. LimitRange supplies d
 
 ---
 
+## Dashboard Workflows
+
+- Overview cards open the corresponding records. Run totals use the last 24 hours
+  of retained history; success rates use completed successful/failed runs, not
+  pending or cancelled runs. Recent runs, deployments and incidents link to their
+  individual details. Missing requests show an error, not a clean zero.
+- Analytics cards link to their source records; failing-pipeline links preserve
+  pipeline IDs even when names match. Daily activity links use UTC dates.
+  Deployment frequency counts tracked deployment records. Build duration is only
+  a lead-time proxy, and failed completed runs are only a change-failure proxy;
+  these are not commit-to-production lead time or production change-failure rate.
+  No duration/rate samples are shown as missing data, not elite performance.
+- Repository cards link to their pipelines; environment cards link to deployments
+  for that environment. Repository registration alone does not validate provider
+  access. Failed or disabled pipeline triggers do not report a successful run.
+- Deployment details link to the exact affected run. Rollback is **not implemented**:
+  the UI marks it unavailable and its API returns HTTP 501 without changing history.
+- Incident summary cards filter their records. `status=open` includes acknowledged
+  incidents, `status=resolved` selects resolved incidents, `from` filters creation
+  time inclusively, and `incidentId` focuses a specific incident.
+- On-call shift editing preserves the chosen timezone and rejects invalid local
+  times. Routing/shift mutations report failures; referenced escalation policies
+  cannot be deleted while routing rules still use them.
+- AI Copilot links to provider settings and token usage. Request failures remain
+  visibly failed, successful replies refresh usage, and the 7-day total sums only
+  the last seven daily records. Browser-history storage failures are explicit.
+- Lists and metrics reflect retained history, not an unlimited audit archive.
+  Integration availability still depends on the configured self-hosted services;
+  synthetic UI/API tests do not establish that those services are reachable.
+
 ## Settings Guide
 
 Open **Settings**. Save settings before testing saved values.
+Unsaved edits disable connection/notification tests so that tests cannot accidentally
+validate an older configuration. Failed saves remain visibly failed and preserve
+the draft; non-admin users have read-only controls. Configured credentials remain
+masked in settings responses and are retained when their placeholders are unchanged.
+Numeric settings enforce the same limits as the controls.
 
 ### Kubernetes and registry
 
@@ -1003,7 +1441,20 @@ Open **Settings**. Save settings before testing saved values.
 - Trivy image scanning.
 - Secret detection.
 - SBOM generation.
-- Critical vulnerability blocking.
+- Native scan stages publish structured results to the security dashboard. External
+  execution engines must publish compatible results to `POST /api/security`.
+- The existing blocking setting gates critical/high vulnerabilities and detected
+  secrets. Allowed-failure stages do not count as blocked builds.
+- Summary cards filter findings; each scan links to its affected run. Run details
+  link back to that run's findings, and editors/admins can explicitly start the full
+  pipeline again after confirming that it may include deployment stages.
+- Totals default to the latest result per pipeline, stage and scan type, so a clean
+  rerun replaces earlier findings. Enable **Include previous scans** for history.
+  **Builds Blocked** counts unique run IDs.
+- Unscanned, skipped and failed scans are not presented as clean. Secret records
+  retain only rule/file/line metadata, never matched secret values or code snippets.
+- Native stage retries replace the same run/stage/type result instead of duplicating
+  it. Results refresh automatically every 30 seconds or via **Refresh results**.
 
 ### Notifications
 
@@ -1017,6 +1468,8 @@ Channels can be independently enabled or disabled:
 ### AI Copilot
 
 Supported provider modes include Groq, OpenAI, Anthropic, Google, and custom OpenAI-compatible endpoints. Keys are masked as `***configured***`.
+The Model field accepts a manually entered model ID for any provider, so retired models can be replaced without a code update. **Test AI provider** tests the entered settings before saving; **Save Changes** remains available without a successful test. A running test shows **Testing...** followed by its result. Editing settings clears previous results and discards results from tests started before the edit. Other integration tests require saved settings and show a reminder while changes are unsaved.
+For Groq, connection retests and Copilot prefer the API key saved through AI Copilot settings. The legacy Groq key is a fallback only. Browser password-manager prompts are separate from the application save; dismissing them does not discard the saved API key.
 
 ### DORA Targets
 
@@ -1246,6 +1699,24 @@ The production build is the authoritative compile/type validation. The existing 
 
 ---
 
+## Screenshots
+
+| Screenshot | Screenshot |
+|---|---|
+| [![Login and first-time setup](screenshots/Screenshot%202026-09-01%20133059.png)](screenshots/Screenshot%202026-09-01%20133059.png)<br>Login and first-time admin setup. | [![Overview dashboard](screenshots/Screenshot%202026-09-01%20133243.png)](screenshots/Screenshot%202026-09-01%20133243.png)<br>Overview dashboard with run health, DORA metrics, recent deployments, and incident load. |
+| [![Pipeline catalog](screenshots/Screenshot%202026-09-01%20133312.png)](screenshots/Screenshot%202026-09-01%20133312.png)<br>Pipeline catalog showing pending, idle, successful, and failed pipeline definitions with trigger controls. | [![Jenkins pipeline creation](screenshots/Screenshot%202026-09-01%20133940.png)](screenshots/Screenshot%202026-09-01%20133940.png)<br>New pipeline flow for Jenkinsfile execution through Jenkins. |
+| [![Argo CD pipeline creation](screenshots/Screenshot%202026-09-01%20134002.png)](screenshots/Screenshot%202026-09-01%20134002.png)<br>New pipeline flow for Argo CD GitOps deployment. | [![Pipeline runs](screenshots/Screenshot%202026-09-01%20134159.png)](screenshots/Screenshot%202026-09-01%20134159.png)<br>Run history with success, failed, pending, filter, search, and export states. |
+| [![Argo CD run detail](screenshots/Screenshot%202026-09-01%20134242.png)](screenshots/Screenshot%202026-09-01%20134242.png)<br>Expanded Argo CD run detail with manual trigger metadata, sync state, health state, and external Argo CD link. | [![Jenkins run detail](screenshots/Screenshot%202026-09-01%20134313.png)](screenshots/Screenshot%202026-09-01%20134313.png)<br>Expanded Jenkins run detail with build duration and Jenkins build artifact link. |
+| [![Repositories](screenshots/Screenshot%202026-09-01%20134334.png)](screenshots/Screenshot%202026-09-01%20134334.png)<br>Repository cards with provider metadata and webhook-active status. | [![Environments](screenshots/Screenshot%202026-09-01%20134402.png)](screenshots/Screenshot%202026-09-01%20134402.png)<br>Deployment environment targets for development, production, and lab clusters. |
+| [![Deployments](screenshots/Screenshot%202026-09-01%20134441.png)](screenshots/Screenshot%202026-09-01%20134441.png)<br>Deployment ledger with staging releases, versions, passed health gates, and rollback actions. | [![Security scans](screenshots/Screenshot%202026-09-01%20134621.png)](screenshots/Screenshot%202026-09-01%20134621.png)<br>Security and compliance scan artifacts with CVE counts, secret detection, build-block counters, and passed scan results. |
+| [![Analytics and DORA](screenshots/Screenshot%202026-09-01%20134646.png)](screenshots/Screenshot%202026-09-01%20134646.png)<br>DORA analytics with deployment frequency, lead time, MTTR, change failure rate, build activity, and failing-pipeline trends. | [![Incidents](screenshots/Screenshot%202026-09-01%20134715.png)](screenshots/Screenshot%202026-09-01%20134715.png)<br>Incident queue with severity, acknowledgement breach timers, assignment, acknowledgement, and resolution actions. |
+| [![On-call](screenshots/Screenshot%202026-09-01%20134754.png)](screenshots/Screenshot%202026-09-01%20134754.png)<br>On-call schedule history and shift management. | [![Routing and escalations](screenshots/Screenshot%202026-09-01%20134814.png)](screenshots/Screenshot%202026-09-01%20134814.png)<br>Routing rules and escalation policies for alert delivery to Slack and on-call responders. |
+| [![AI Copilot](screenshots/Screenshot%202026-09-01%20134834.png)](screenshots/Screenshot%202026-09-01%20134834.png)<br>AI Copilot workspace with usage counters, prompt shortcuts, and pipeline triage prompts. | [![Settings and integrations](screenshots/Screenshot%202026-09-01%20134859.png)](screenshots/Screenshot%202026-09-01%20134859.png)<br>Settings for Kubernetes, registry, credentials, notifications, AI, DORA targets, and token usage. |
+| [![Team and roles](screenshots/Screenshot%202026-09-01%20134915.png)](screenshots/Screenshot%202026-09-01%20134915.png)<br>Team management with admin/viewer roles and role reference. | [![Native pipeline stages](screenshots/Screenshot%202026-09-01%20154833.png)](screenshots/Screenshot%202026-09-01%20154833.png)<br>Native VynCICD stage editor with lint, test, build, and scan steps. |
+| [![Execution mode selector](screenshots/Screenshot%202026-09-01%20154954.png)](screenshots/Screenshot%202026-09-01%20154954.png)<br>Execution-mode selector for native stages, Jenkinsfile via Jenkins, and Argo CD GitOps deployment. |  |
+
+---
+
 ## Final Mental Model
 
 ```text
@@ -1271,27 +1742,3 @@ Operating principles:
 6. Never expose secrets in source, logs, screenshots, or chat.
 7. Build before restart and verify the live result after every change.
 8. Test CD in a dedicated namespace before considering production.
-
-
----
-
-## Part of the VynOps Suite
-
-| Product | Purpose | Repo |
-|---|---|---|
-| **VynOps** | Kubernetes operations platform | [vynops/VynOps](https://github.com/vynops/VynOps) |
-| **VynAI** | Ollama fleet manager and AI gateway | [vynops/VynAI](https://github.com/vynops/VynAI) |
-| **VynCost** | Cloud cost visibility | [vynops/VynCost](https://github.com/vynops/VynCost) |
-| **VynDB** | Database operations | [vynops/VynDB](https://github.com/vynops/VynDB) |
-| **VynDC** | Data center management | [vynops/VynDC](https://github.com/vynops/VynDC) |
-| **VynCICD** | CI/CD pipeline management | [vynops/VynCICD](https://github.com/vynops/VynCICD) |
-| **VynHana** | SAP HANA Database management | [vynops/VynHana](https://github.com/vynops/VynHana) |
-| **VynSAP** | SAP ERP management | [vynops/VynSAP](https://github.com/vynops/VynSAP) |
-
----
-
-## License
-
-MIT — see [LICENSE](LICENSE).
-
----

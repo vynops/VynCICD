@@ -119,7 +119,7 @@ export async function POST(req: NextRequest) {
   const settings = getSettings()
   const provider = settings.aiProvider ?? 'groq'
   const apiKey = provider === 'groq'
-    ? (settings.groqApiKey || settings.aiApiKey || process.env.GROQ_API_KEY)
+    ? (settings.aiApiKey || settings.groqApiKey || process.env.GROQ_API_KEY)
     : settings.aiApiKey
   const configuredModel = settings.aiModel?.trim()
   const model = provider === 'groq' && (!configuredModel || RETIRED_GROQ_MODELS.has(configuredModel))

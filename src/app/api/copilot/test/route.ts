@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
     const apiKey = (requestedApiKey && requestedApiKey !== CONFIGURED_MASK)
       ? requestedApiKey
       : (provider === 'groq'
-          ? (settings.groqApiKey || settings.aiApiKey || process.env.GROQ_API_KEY || '')
+          ? (settings.aiApiKey || settings.groqApiKey || process.env.GROQ_API_KEY || '')
           : (settings.aiApiKey || ''))
 
     if (!apiKey) {

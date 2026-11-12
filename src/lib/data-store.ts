@@ -183,18 +183,31 @@ export interface Vulnerability {
   description: string
   cveId?: string
 }
+export interface SecretFinding {
+  id: string
+  filePath: string
+  ruleId: string
+  title: string
+  severity: VulnSeverity
+  startLine?: number
+}
 export interface SecurityScan {
   id: string
   runId: string
   repoFullName: string
   image?: string
   scanType: 'container' | 'sast' | 'secret' | 'sbom' | 'dast'
-  status: 'passed' | 'failed' | 'warning' | 'skipped'
+  status: 'passed' | 'failed' | 'warning' | 'skipped' | 'error'
   vulnerabilities: Vulnerability[]
   secretsFound: number
   sbomArtifactUrl?: string
   scannedAt: string
   blockedBuild: boolean
+  stageName?: string
+  pipelineId?: string
+  pipelineName?: string
+  secretFindings?: SecretFinding[]
+  error?: string
   _demo?: boolean
 }
 

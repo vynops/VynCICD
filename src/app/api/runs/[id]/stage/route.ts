@@ -8,7 +8,7 @@ const RUNNER_SECRET = process.env.RUNNER_SECRET ?? process.env.VYNCICD_SECRET ??
 
 function authRunner(req: NextRequest): boolean {
   const token = req.headers.get('x-runner-token') ?? ''
-  return !RUNNER_SECRET || token === RUNNER_SECRET
+  return Boolean(RUNNER_SECRET) && token === RUNNER_SECRET
 }
 
 interface StageUpdate {

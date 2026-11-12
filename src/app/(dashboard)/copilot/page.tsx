@@ -4,8 +4,10 @@ import { useState, useRef, useEffect } from 'react'
 import useSWR from 'swr'
 import { Bot, Send, Loader2, User, RotateCcw, History, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import Link from 'next/link'
+import { fetchJson } from '@/lib/fetch-json'
+import type { CopilotUsageSummary } from '@/lib/copilot-usage'
 
-const fetcher = (url: string) => fetch(url).then(r => r.json())
 type Source = { label: string; href: string }
 
 interface Message {
@@ -14,6 +16,7 @@ interface Message {
   content: string
   ts: string
   sources?: Source[]
+  error?: boolean
 }
 
 const PROMPTS = [
@@ -28,19 +31,25 @@ const PROMPTS = [
 const HISTORY_KEY = 'vyncicd_copilot_history'
 
 export default function CopilotPage() {
-  const { data: usage } = useSWR('/api/copilot/usage', fetcher, { refreshInterval: 30000 })
+  const { data: usage, error: usageError, mutate: refreshUsage } = useSWR<CopilotUsageSummary>('/api/copilot/usage', fetchJson, { refreshInterval: 30000 })
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput]       = useState('')
   const [loading, setLoading]   = useState(false)
   const [history, setHistory]   = useState<string[]>([])
+  const [historyError, setHistoryError] = useState('')
+  const [usageRefreshFailed, setUsageRefreshFailed] = useState(false)
   const bottomRef               = useRef<HTMLDivElement>(null)
 
   // Load history from localStorage on mount
   useEffect(() => {
     try {
       const saved = localStorage.getItem(HISTORY_KEY)
-      if (saved) setHistory(JSON.parse(saved) as string[])
-    } catch { /* ignore */ }
+      if (saved) {
+        const parsed: unknown = JSON.parse(saved)
+        if (!Array.isArray(parsed) || !parsed.every(item => typeof item === 'string')) throw new Error('Invalid history')
+        setHistory(parsed)
+      }
+    } catch { setHistoryError('Prompt history could not be loaded. Chat remains available.') }
   }, [])
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
@@ -48,14 +57,14 @@ export default function CopilotPage() {
   function addToHistory(q: string) {
     setHistory(prev => {
       const deduped = [q, ...prev.filter(h => h !== q)].slice(0, 30)
-      try { localStorage.setItem(HISTORY_KEY, JSON.stringify(deduped)) } catch { /* ignore */ }
+      try { localStorage.setItem(HISTORY_KEY, JSON.stringify(deduped)) } catch { setHistoryError('Prompt history could not be saved in this browser.') }
       return deduped
     })
   }
 
   function clearHistory() {
     setHistory([])
-    try { localStorage.removeItem(HISTORY_KEY) } catch { /* ignore */ }
+    try { localStorage.removeItem(HISTORY_KEY); setHistoryError('') } catch { setHistoryError('Prompt history could not be removed from this browser.') }
   }
 
   async function send(text?: string) {
@@ -67,23 +76,26 @@ export default function CopilotPage() {
     setMessages(prev => [...prev, userMsg])
     setLoading(true)
     try {
-      const res = await fetch('/api/copilot', {
+      const data = await fetchJson<{ answer?: string; sources?: Source[] }>('/api/copilot', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: [...messages, userMsg].map(m => ({ role: m.role, content: m.content })) }),
+        body: JSON.stringify({ messages: [...messages, userMsg].filter(message => !message.error).map(m => ({ role: m.role, content: m.content })) }),
       })
-      const data = await res.json() as { answer?: string; error?: string; sources?: Source[] }
+      if (typeof data.answer !== 'string' || !data.answer.trim()) throw new Error('No valid answer was returned. Please retry.')
+      const answer = data.answer
       setMessages(prev => [...prev, {
         id: crypto.randomUUID(),
         role: 'assistant',
-        content: data.answer ?? data.error ?? 'No response.',
+        content: answer,
         ts: new Date().toISOString(),
         sources: data.sources,
       }])
-    } catch {
-      setMessages(prev => [...prev, { id: crypto.randomUUID(), role: 'assistant', content: 'Network error. Please try again.', ts: new Date().toISOString() }])
+      refreshUsage().then(() => setUsageRefreshFailed(false), () => setUsageRefreshFailed(true))
+    } catch (failure) {
+      setMessages(prev => [...prev, { id: crypto.randomUUID(), role: 'assistant', content: failure instanceof Error ? failure.message : 'Network error. Please try again.', error: true, ts: new Date().toISOString() }])
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   return (
@@ -91,12 +103,18 @@ export default function CopilotPage() {
 
       {/* ── Left: existing chat column ── */}
       <div className="flex flex-col flex-1 min-w-0">
+        <div className="flex gap-4 mb-2 text-xs">
+          <Link href="/settings?tab=ai" className="text-emerald-400 hover:underline">Configure AI provider</Link>
+          <Link href="/settings?tab=usage" className="text-emerald-400 hover:underline">View token usage</Link>
+        </div>
+        {(usageError || usageRefreshFailed) && <p role="alert" className="text-xs text-red-400 mb-2">Token usage could not be refreshed.</p>}
+        {historyError && <p role="alert" className="text-xs text-amber-400 mb-2">{historyError}</p>}
         {/* Usage bar */}
         {usage && (
           <div className="flex flex-wrap gap-4 text-[11px] text-slate-500 mb-3 px-1">
             <span>Today: <span className="text-white font-mono">{usage.today?.requests ?? 0}</span> requests</span>
             <span>Tokens: <span className="text-white font-mono">{(usage.today?.totalTokens ?? 0).toLocaleString()}</span></span>
-            <span>7-day total: <span className="text-white font-mono">{(usage.total?.totalTokens ?? 0).toLocaleString()}</span> tokens</span>
+            <span>7-day total: <span className="text-white font-mono">{(usage.last7Days?.reduce((sum: number, day: { totalTokens: number }) => sum + day.totalTokens, 0) ?? 0).toLocaleString()}</span> tokens</span>
           </div>
         )}
 
@@ -109,7 +127,7 @@ export default function CopilotPage() {
               </div>
               <div>
                 <div className="text-sm font-semibold text-white mb-1">VynCICD AI Copilot</div>
-                <div className="text-xs text-slate-500">Powered by Groq · Ask about pipeline failures, DORA metrics, security issues, and more.</div>
+                <div className="text-xs text-slate-500">Uses your configured AI provider. Ask about pipeline failures, metrics, and security findings.</div>
               </div>
             </div>
           )}
@@ -126,6 +144,7 @@ export default function CopilotPage() {
                   ? 'bg-emerald-500/20 text-emerald-100 border border-emerald-500/30'
                   : 'bg-slate-800/60 text-slate-200 border border-slate-700/40'
               )}>
+                {msg.error && <div role="alert" className="text-xs font-semibold text-red-400 mb-1">Request failed</div>}
                 {msg.content}
                 {msg.sources && msg.sources.length > 0 && (
                   <div className="mt-3 border-t border-slate-700/60 pt-2 space-y-1">
@@ -186,7 +205,7 @@ export default function CopilotPage() {
               disabled={loading}
               className="flex-1 px-4 py-3 bg-transparent text-sm text-white placeholder-slate-600 focus:outline-none disabled:opacity-50"
             />
-            <button onClick={() => send()} disabled={loading || !input.trim()}
+            <button onClick={() => send()} disabled={loading || !input.trim()} aria-label="Send message"
               className="px-4 py-3 text-slate-500 hover:text-emerald-400 disabled:opacity-30 transition-colors">
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
             </button>

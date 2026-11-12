@@ -15,6 +15,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (idx === -1) return NextResponse.json({ error: 'Pipeline not found' }, { status: 404 })
 
   const pipeline = pipelines[idx]
+  if (!pipeline.enabled) return NextResponse.json({ error: 'Pipeline is disabled' }, { status: 409 })
   const repos = loadRepos()
   const repo = repos.find(r => r.id === pipeline.repoId)
   const settings = getSettings()
@@ -89,5 +90,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   savePipelines(pipelines)
 
   console.log(`[manual-trigger] pipeline=${pipeline.name} run=${run.id}`)
+  if (savedRun.status === 'failed') {
+    return NextResponse.json({ ok: false, runId: run.id, error: savedRun.error ?? 'Pipeline execution could not be started.' }, { status: 502 })
+  }
   return NextResponse.json({ ok: true, runId: run.id }, { status: 201 })
 }

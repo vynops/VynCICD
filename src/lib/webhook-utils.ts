@@ -7,6 +7,7 @@ import {
   type GitProvider,
   type StageRun,
 } from '@/lib/data-store'
+import { getSettings } from '@/lib/settings-store'
 
 export interface PushPayload {
   fullName: string
@@ -40,6 +41,7 @@ export function processWebhookPush(payload: PushPayload): string[] {
   const created: string[] = []
   const now = new Date().toISOString()
   const cloneUrl = repo?.cloneUrl
+  const settings = getSettings()
 
   for (const pipeline of triggered) {
     const stageRuns: StageRun[] = pipeline.stages.map(s => ({
@@ -50,6 +52,8 @@ export function processWebhookPush(payload: PushPayload): string[] {
       manifest: s.manifest,
       environment: s.environment,
       clusterName: s.clusterName,
+      timeoutMinutes: s.timeoutMinutes ?? settings.defaultTimeoutMinutes,
+      retryCount: s.retryCount ?? settings.defaultRetryCount,
       allowFailure: s.allowFailure,
       status: 'pending',
       logs: [],

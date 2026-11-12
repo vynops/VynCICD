@@ -1,13 +1,13 @@
 'use client'
 
 import useSWR from 'swr'
-import { useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { GitBranch, Play, ToggleLeft, ToggleRight, Plus, ChevronRight, X, Trash2, Pencil } from 'lucide-react'
 import { timeAgo, cn } from '@/lib/utils'
+import { fetchList } from '@/lib/fetch-json'
 import type { Pipeline, Repository, PipelineStage } from '@/lib/data-store'
 import type { Environment } from '@/lib/data-store'
-
-const fetcher = (url: string) => fetch(url).then(r => r.json())
 
 const STAGE_TYPES = ['run', 'test', 'build', 'scan', 'deploy', 'notify'] as const
 
@@ -33,10 +33,23 @@ const TRIGGER_LABEL: Record<string, string> = {
   push: 'Push', pull_request: 'PR', tag: 'Tag', schedule: 'Scheduled', manual: 'Manual',
 }
 
-export default function PipelinesPage() {
-  const { data: pipelines = [], mutate } = useSWR<Pipeline[]>('/api/pipelines', fetcher, { refreshInterval: 15000 })
-  const { data: repos = [] } = useSWR<Repository[]>('/api/repositories', fetcher)
-  const { data: environments = [] } = useSWR<Environment[]>('/api/environments', fetcher)
+export function pipelineRunHref(pipelineId: string, runId?: string) {
+  const params = new URLSearchParams({ pipelineId })
+  if (runId) params.set('runId', runId)
+  return `/runs?${params.toString()}`
+}
+
+export function pipelinePageFilters(search: { get(name: string): string | null }) {
+  return { repoId: search.get('repoId'), pipelineId: search.get('pipelineId') }
+}
+
+function PipelinesPageContent() {
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const { repoId: queryRepoId, pipelineId: queryPipelineId } = pipelinePageFilters(searchParams)
+  const { data: pipelines, error: pipelinesError, mutate } = useSWR<Pipeline[]>('/api/pipelines', fetchList, { refreshInterval: 15000 })
+  const { data: repos = [], error: reposError } = useSWR<Repository[]>('/api/repositories', fetchList)
+  const { data: environments = [], error: environmentsError } = useSWR<Environment[]>('/api/environments', fetchList)
 
   // Unique cluster names from environment records
   const clusterNames = Array.from(new Set(
@@ -45,7 +58,25 @@ export default function PipelinesPage() {
       .filter(Boolean) as string[]
   ))
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const selected = pipelines.find(p => p.id === selectedId)
+  const [repositoryFilter, setRepositoryFilter] = useState<string | null>(null)
+  const [pendingRepoSelection, setPendingRepoSelection] = useState<string | null>(null)
+  const visiblePipelines = (pipelines ?? []).filter(p => !repositoryFilter || p.repoId === repositoryFilter)
+  const selected = visiblePipelines.find(p => p.id === selectedId)
+  const [triggeringId, setTriggeringId] = useState<string | null>(null)
+  const [actionError, setActionError] = useState('')
+  const [lastTriggered, setLastTriggered] = useState<{ pipelineId: string; runId: string; status: 'started' | 'failed' } | null>(null)
+
+  useEffect(() => {
+    setRepositoryFilter(queryRepoId)
+    setSelectedId(queryPipelineId)
+    setPendingRepoSelection(queryRepoId && !queryPipelineId ? queryRepoId : null)
+  }, [queryRepoId, queryPipelineId])
+
+  useEffect(() => {
+    if (!pendingRepoSelection || !pipelines) return
+    setSelectedId(pipelines.find(p => p.repoId === pendingRepoSelection)?.id ?? null)
+    setPendingRepoSelection(null)
+  }, [pipelines, pendingRepoSelection])
 
   // New pipeline modal state
   const [showModal, setShowModal] = useState(false)
@@ -121,6 +152,8 @@ export default function PipelinesPage() {
       if (!res.ok) { const d = await res.json(); setError(d.error ?? 'Failed to create pipeline'); return }
       setShowModal(false)
       mutate()
+    } catch {
+      setError('Network error while creating pipeline.')
     } finally {
       setSaving(false)
     }
@@ -168,6 +201,8 @@ export default function PipelinesPage() {
       setShowModal(false)
       setEditingId(null)
       mutate()
+    } catch {
+      setError('Network error while saving pipeline.')
     } finally {
       setSaving(false)
     }
@@ -175,27 +210,66 @@ export default function PipelinesPage() {
 
   async function deletePipeline(id: string, name: string) {
     if (!confirm(`Delete pipeline "${name}"? This cannot be undone.`)) return
-    await fetch(`/api/pipelines/${id}`, { method: 'DELETE' })
-    if (selectedId === id) setSelectedId(null)
-    mutate()
+    setActionError('')
+    try {
+      const response = await fetch(`/api/pipelines/${id}`, { method: 'DELETE' })
+      if (!response.ok) throw new Error(`Request failed (${response.status})`)
+      if (selectedId === id) setSelectedId(null)
+      await mutate().catch(() => undefined)
+    } catch {
+      setActionError('Pipeline could not be deleted. Refresh and try again.')
+    }
   }
 
   async function toggleEnabled(id: string, current: boolean) {
-    await fetch(`/api/pipelines/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ enabled: !current }),
-    })
-    mutate()
+    setActionError('')
+    try {
+      const response = await fetch(`/api/pipelines/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: !current }),
+      })
+      if (!response.ok) throw new Error(`Request failed (${response.status})`)
+      await mutate().catch(() => undefined)
+    } catch {
+      setActionError(`Pipeline could not be ${current ? 'disabled' : 'enabled'}. Refresh and try again.`)
+    }
   }
 
   async function triggerManual(id: string) {
-    await fetch(`/api/pipelines/${id}/trigger`, { method: 'POST' })
-    mutate()
+    setTriggeringId(id)
+    setActionError('')
+    setLastTriggered(null)
+    try {
+      const response = await fetch(`/api/pipelines/${id}/trigger`, { method: 'POST' })
+      const result = await response.json() as { runId?: string; error?: string }
+      await mutate().catch(() => undefined)
+      if (!response.ok || !result.runId) {
+        setActionError(`${result.error ?? 'Pipeline run could not be started.'}${result.runId ? ` Run ${result.runId} was recorded; check its status.` : ''}`)
+        if (result.runId) setLastTriggered({ pipelineId: id, runId: result.runId, status: 'failed' })
+      } else {
+        setLastTriggered({ pipelineId: id, runId: result.runId, status: 'started' })
+      }
+    } catch {
+      setActionError('Network error while starting the pipeline run.')
+    } finally {
+      setTriggeringId(null)
+    }
   }
 
   return (
     <div className="space-y-4 max-w-screen-2xl">
+      {pipelinesError && <div role="alert" className="rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-xs text-red-400">Pipelines could not be loaded. Refresh to try again.</div>}
+      {reposError && <div role="alert" className="rounded-lg border border-amber-500/20 bg-amber-500/10 p-3 text-xs text-amber-400">Repositories could not be loaded; pipeline creation may be unavailable.</div>}
+      {environmentsError && <div role="alert" className="rounded-lg border border-amber-500/20 bg-amber-500/10 p-3 text-xs text-amber-400">Environments could not be loaded; cluster choices may be incomplete.</div>}
+      {actionError && <div role="alert" className="rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-xs text-red-400">{actionError}</div>}
+      {lastTriggered && <div role="status" className={cn('rounded-lg border p-3 text-xs', lastTriggered.status === 'started' ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-400' : 'border-amber-500/20 bg-amber-500/10 text-amber-300')}>
+        {lastTriggered.status === 'started' ? 'Run started.' : 'Run was recorded but failed to start.'} <a className="underline" href={pipelineRunHref(lastTriggered.pipelineId, lastTriggered.runId)}>View run details</a>
+      </div>}
+      {repositoryFilter && <div className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-900/50 px-3 py-2 text-xs text-slate-400">
+        Showing pipelines for {repos.find(repo => repo.id === repositoryFilter)?.fullName ?? 'the selected repository'}.
+        <button type="button" onClick={() => router.replace('/pipelines')} className="text-emerald-400 hover:text-emerald-300">Clear filter</button>
+      </div>}
       <div className="flex justify-end">
         <button
           onClick={openModal}
@@ -207,7 +281,7 @@ export default function PipelinesPage() {
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
         {/* List */}
         <div className="xl:col-span-1 space-y-2">
-          {pipelines.map(p => (
+          {visiblePipelines.map(p => (
             <div
               key={p.id}
               onClick={() => setSelectedId(p.id === selectedId ? null : p.id)}
@@ -239,7 +313,8 @@ export default function PipelinesPage() {
                 <div className="flex items-center gap-2">
                   <button
                     onClick={e => { e.stopPropagation(); triggerManual(p.id) }}
-                    className="text-slate-500 hover:text-emerald-400 transition-colors" title="Trigger manual run">
+                    disabled={!p.enabled || triggeringId === p.id}
+                    className="text-slate-500 hover:text-emerald-400 transition-colors disabled:opacity-40 disabled:cursor-not-allowed" title={!p.enabled ? 'Enable this pipeline before triggering a run' : triggeringId === p.id ? 'Starting run…' : 'Trigger manual run'}>
                     <Play className="w-3.5 h-3.5" />
                   </button>
                   <button
@@ -263,11 +338,12 @@ export default function PipelinesPage() {
               </div>
             </div>
           ))}
-          {pipelines.length === 0 && (
+          {pipelines && visiblePipelines.length === 0 && !pipelinesError && (
             <div className="bg-[#0d1117] border border-slate-800/60 rounded-xl p-8 text-center text-sm text-slate-600">
-              No pipelines yet. Add a repository to auto-detect pipelines.
+              {repositoryFilter ? 'No pipelines are configured for this repository.' : 'No pipelines yet. Add a repository to create one.'}
             </div>
           )}
+          {!pipelines && !pipelinesError && <div className="p-8 text-center text-sm text-slate-600">Loading pipelines…</div>}
         </div>
 
         {/* Detail panel */}
@@ -327,6 +403,12 @@ export default function PipelinesPage() {
                     <div className="text-xs text-white font-medium truncate">{item.value}</div>
                   </div>
                 ))}
+              </div>
+              <div className="mt-4 flex flex-wrap gap-3 text-xs">
+                <a href={pipelineRunHref(selected.id, selected.lastRunId)} className="text-emerald-400 hover:text-emerald-300 underline">
+                  {selected.lastRunId ? 'View latest run' : 'View run history'}
+                </a>
+                {selected.executionMode === 'argocd' && selected.argoCdApplication && <span className="text-slate-500">Argo CD sync occurs when a run is triggered.</span>}
               </div>
             </div>
           ) : (
@@ -506,4 +588,8 @@ export default function PipelinesPage() {
       )}
     </div>
   )
+}
+
+export default function PipelinesPage() {
+  return <Suspense fallback={<div className="p-8 text-center text-sm text-slate-600">Loading pipelines…</div>}><PipelinesPageContent /></Suspense>
 }

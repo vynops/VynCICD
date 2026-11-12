@@ -1,12 +1,34 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import useSWR from 'swr'
 import { AlertTriangle, CheckCircle, Clock, Download, Search, X, User, FileText, UserPlus, Plus, Timer } from 'lucide-react'
 import { timeAgo, cn, exportCsv } from '@/lib/utils'
+import { fetchJson, fetchList } from '@/lib/fetch-json'
 import type { Incident, Shift } from '@/lib/oncall-store'
 
-const fetcher = (url: string) => fetch(url).then(r => r.json())
+const INCIDENT_STATUSES = ['all', 'open', 'acknowledged', 'resolved'] as const
+
+export function incidentPageFilters(search: string) {
+  const params = new URLSearchParams(search)
+  const requestedStatus = params.get('status')
+  const requestedFrom = params.get('from')
+  return {
+    status: INCIDENT_STATUSES.includes(requestedStatus as typeof INCIDENT_STATUSES[number]) ? requestedStatus! : 'open',
+    incidentId: params.get('incidentId'),
+    from: requestedFrom && Number.isFinite(Date.parse(requestedFrom)) ? requestedFrom : null,
+  }
+}
+
+export function matchesIncidentStatus(status: Incident['status'], filter: string) {
+  return filter === 'all' || (filter === 'open' ? status !== 'resolved' : status === filter)
+}
+
+export function matchesIncidentCreatedFrom(createdAt: string, from: string | null) {
+  const created = Date.parse(createdAt)
+  return !from || (Number.isFinite(created) && created >= Date.parse(from))
+}
 
 interface SlaTier { ackMinutes: number; resolveMinutes: number }
 type SlaStore = Record<string, SlaTier>
@@ -234,13 +256,17 @@ function CreateModal({ onClose, onSave }: { onClose: () => void; onSave: () => v
   )
 }
 
-export default function IncidentsPage() {
-  const { data: incidents = [], mutate } = useSWR<Incident[]>('/api/incidents', fetcher, { refreshInterval: 30000 })
-  const { data: shifts = [] } = useSWR<Shift[]>('/api/oncall', fetcher)
-  const { data: me } = useSWR<{ email: string; name: string } | null>('/api/auth/me', fetcher)
-  const { data: sla = {} } = useSWR<SlaStore>('/api/routing/sla', fetcher)
+function IncidentsContent() {
+  const searchParams = useSearchParams()
+  const queryString = searchParams.toString()
+  const { data: incidentData, mutate, error: incidentError, isLoading } = useSWR<Incident[]>('/api/incidents', fetchList, { refreshInterval: 30000 })
+  const incidents = incidentData ?? []
+  const { data: shifts = [] } = useSWR<Shift[]>('/api/oncall', fetchList)
+  const { data: me } = useSWR<{ email: string; name: string } | null>('/api/auth/me', fetchJson)
+  const { data: sla = {} } = useSWR<SlaStore>('/api/routing/sla', fetchJson)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('open')
+  const [createdFrom, setCreatedFrom] = useState<string | null>(null)
   const [severityFilter, setSeverityFilter] = useState('all')
   const [actionModal, setActionModal] = useState<{ incident: Incident; next: 'acknowledged' | 'resolved' } | null>(null)
   const [assignModal, setAssignModal] = useState<Incident | null>(null)
@@ -248,8 +274,11 @@ export default function IncidentsPage() {
   const [focusedIncidentId, setFocusedIncidentId] = useState<string | null>(null)
 
   useEffect(() => {
-    setFocusedIncidentId(new URLSearchParams(window.location.search).get('incidentId'))
-  }, [])
+    const filters = incidentPageFilters(queryString)
+    setStatusFilter(filters.status)
+    setFocusedIncidentId(filters.incidentId)
+    setCreatedFrom(filters.from)
+  }, [queryString])
 
   useEffect(() => {
     if (!focusedIncidentId || incidents.length === 0) return
@@ -257,11 +286,12 @@ export default function IncidentsPage() {
   }, [focusedIncidentId, incidents])
 
   const filtered = incidents.filter(i => {
-    const matchStatus   = focusedIncidentId ? i.id === focusedIncidentId : statusFilter === 'all' || i.status === statusFilter
+    const matchStatus   = focusedIncidentId ? i.id === focusedIncidentId : matchesIncidentStatus(i.status, statusFilter)
+    const matchCreated = matchesIncidentCreatedFrom(i.createdAt, createdFrom)
     const matchSeverity = severityFilter === 'all' || i.severity === severityFilter
     const q = search.toLowerCase()
     const matchSearch   = !q || i.title.toLowerCase().includes(q) || (i.source ?? '').toLowerCase().includes(q) || (i.repo ?? '').toLowerCase().includes(q) || (i.author ?? '').toLowerCase().includes(q)
-    return matchStatus && matchSeverity && matchSearch
+    return matchStatus && matchCreated && matchSeverity && matchSearch
   })
 
   async function updateStatus(incident: Incident, newStatus: 'acknowledged' | 'resolved', notes: string) {
@@ -276,7 +306,23 @@ export default function IncidentsPage() {
     mutate()
   }
 
-  const open = incidents.filter(i => i.status === 'open').length
+  function changeStatusFilter(status: string) {
+    setFocusedIncidentId(null)
+    setStatusFilter(status)
+    const url = new URL(window.location.href)
+    url.searchParams.set('status', status)
+    url.searchParams.delete('incidentId')
+    window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`)
+  }
+
+  function clearCreatedFrom() {
+    setCreatedFrom(null)
+    const url = new URL(window.location.href)
+    url.searchParams.delete('from')
+    window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`)
+  }
+
+  const open = incidents.filter(i => i.status !== 'resolved').length
   const ackd = incidents.filter(i => i.status === 'acknowledged').length
 
   return (
@@ -296,14 +342,15 @@ export default function IncidentsPage() {
       {/* Summary */}
       <div className="grid grid-cols-3 gap-3">
         {[
-          { label: 'Open', value: open, color: open > 0 ? 'text-red-400' : 'text-slate-400' },
-          { label: 'Acknowledged', value: ackd, color: ackd > 0 ? 'text-yellow-400' : 'text-slate-400' },
-          { label: 'Total', value: incidents.length, color: 'text-slate-300' },
+          { label: 'Open', value: open, color: open > 0 ? 'text-red-400' : 'text-slate-400', filter: 'open' },
+          { label: 'Acknowledged', value: ackd, color: ackd > 0 ? 'text-yellow-400' : 'text-slate-400', filter: 'acknowledged' },
+          { label: 'Total', value: incidents.length, color: 'text-slate-300', filter: 'all' },
         ].map(s => (
-          <div key={s.label} className="bg-[#0d1117] border border-slate-800/60 rounded-xl p-3 text-center">
+          <button key={s.label} onClick={() => changeStatusFilter(s.filter)}
+            className="bg-[#0d1117] border border-slate-800/60 rounded-xl p-3 text-center hover:border-slate-600 transition-colors">
             <div className={cn('text-xl font-black', s.color)}>{s.value}</div>
             <div className="text-[10px] text-slate-500 mt-0.5">{s.label}</div>
-          </div>
+          </button>
         ))}
       </div>
 
@@ -317,7 +364,7 @@ export default function IncidentsPage() {
         </div>
         <div className="flex gap-1.5">
           {['all', 'open', 'acknowledged', 'resolved'].map(s => (
-            <button key={s} onClick={() => setStatusFilter(s)}
+            <button key={s} onClick={() => changeStatusFilter(s)}
               className={cn('text-[10px] font-bold px-2 py-1.5 rounded-lg capitalize transition-colors border',
                 statusFilter === s ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' : 'text-slate-500 border-slate-800 hover:text-white')}>
               {s}
@@ -344,11 +391,24 @@ export default function IncidentsPage() {
           </button>
         </div>
       </div>
+      {createdFrom && (
+        <div className="text-[11px] text-slate-400">
+          Showing incidents created since {new Date(createdFrom).toLocaleString()}.
+          <button onClick={clearCreatedFrom} className="ml-2 text-emerald-400 hover:text-emerald-300 underline">Clear date filter</button>
+        </div>
+      )}
 
       {/* Incident list */}
+      {incidentError ? (
+        <div role="alert" className="bg-red-500/10 border border-red-500/20 rounded-xl p-8 text-center text-sm text-red-300">
+          Unable to load incidents. <button onClick={() => mutate()} className="underline hover:text-white">Retry</button>
+        </div>
+      ) : isLoading ? (
+        <div role="status" className="bg-[#0d1117] border border-slate-800/60 rounded-xl p-8 text-center text-sm text-slate-500">Loading incidents…</div>
+      ) : (
       <div className="space-y-2">
         {filtered.map(inc => (
-          <div key={inc.id} id={`incident-${inc.id}`} className="bg-[#0d1117] border border-slate-800/60 rounded-xl p-4 hover:border-slate-700/50 transition-colors scroll-mt-6">
+          <div key={inc.id} id={`incident-${inc.id}`} className={cn('bg-[#0d1117] border rounded-xl p-4 hover:border-slate-700/50 transition-colors scroll-mt-6', focusedIncidentId === inc.id ? 'border-emerald-500/50 ring-1 ring-emerald-500/20' : 'border-slate-800/60')}>
             <div className="flex flex-wrap items-start gap-3">
               <AlertTriangle className={cn('w-4 h-4 mt-0.5 flex-shrink-0', inc.severity === 'critical' ? 'text-red-400' : inc.severity === 'high' ? 'text-orange-400' : 'text-yellow-400')} />
               <div className="flex-1 min-w-0">
@@ -396,10 +456,19 @@ export default function IncidentsPage() {
         ))}
         {filtered.length === 0 && (
           <div className="bg-[#0d1117] border border-dashed border-slate-800 rounded-xl p-10 text-center text-sm text-slate-600">
-            {statusFilter === 'open' ? '🎉 No open incidents!' : 'No incidents match the current filters.'}
+            {focusedIncidentId ? 'Incident not found. It may have been removed or you may not have access to it.' : statusFilter === 'open' ? '🎉 No open incidents!' : 'No incidents match the current filters.'}
           </div>
         )}
       </div>
+      )}
     </div>
+  )
+}
+
+export default function IncidentsPage() {
+  return (
+    <Suspense fallback={<div role="status" className="text-sm text-slate-500">Loading incidents…</div>}>
+      <IncidentsContent />
+    </Suspense>
   )
 }

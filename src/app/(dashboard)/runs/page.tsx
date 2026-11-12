@@ -1,12 +1,14 @@
 'use client'
 
 import useSWR from 'swr'
-import { useEffect, useState } from 'react'
+import { Fragment, Suspense, useEffect, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
+import Link from 'next/link'
 import { CheckCircle, XCircle, Clock, RefreshCw, ChevronDown, ChevronRight, Download, Search, Filter } from 'lucide-react'
 import { timeAgo, duration, cn, exportCsv } from '@/lib/utils'
 import type { PipelineRun, StageRun } from '@/lib/data-store'
+import { fetchJson, fetchList } from '@/lib/fetch-json'
 
-const fetcher = (url: string) => fetch(url).then(r => r.json())
 
 const STATUS_COLOR: Record<string, string> = {
   success:   'text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
@@ -40,8 +42,9 @@ function StageDetail({ stage }: { stage: StageRun }) {
         {stage.retries > 0 && <span className="text-[10px] text-yellow-400">↺{stage.retries}</span>}
         {open ? <ChevronDown className="w-3 h-3 text-slate-500" /> : <ChevronRight className="w-3 h-3 text-slate-500" />}
       </button>
-      {open && stage.logs.length > 0 && (
+      {open && (
         <div className="bg-slate-950/80 border-t border-slate-800/40 p-3">
+          {stage.logs.length === 0 && <p className="text-xs text-slate-500">No stage logs recorded.</p>}
           {stage.logs.map((log, i) => (
             <div key={i} className="text-[11px] font-mono text-slate-400 leading-relaxed">{log}</div>
           ))}
@@ -54,6 +57,10 @@ function StageDetail({ stage }: { stage: StageRun }) {
 function RunDetail({ run }: { run: PipelineRun }) {
   return (
     <div className="bg-[#0d1117] border border-emerald-500/30 rounded-xl p-5 mt-2">
+      <Link href={`/security?runId=${encodeURIComponent(run.id)}`} className="inline-block text-xs text-emerald-400 hover:underline mb-4">
+        View security findings for this run
+      </Link>
+      <Link href={`/pipelines?pipelineId=${encodeURIComponent(run.pipelineId)}`} className="inline-block text-xs text-emerald-400 hover:underline ml-4 mb-4">View pipeline</Link>
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
         {[
           { label: 'Repository', value: run.repoFullName },
@@ -61,7 +68,7 @@ function RunDetail({ run }: { run: PipelineRun }) {
           { label: 'Commit', value: run.commit.slice(0, 8) },
           { label: 'Author', value: run.author },
           { label: 'Trigger', value: run.trigger },
-          { label: 'Duration', value: run.durationMs ? duration(run.durationMs) : 'In progress' },
+          { label: 'Duration', value: run.durationMs != null ? duration(run.durationMs) : ['pending', 'running'].includes(run.status) ? 'In progress' : 'Not recorded' },
         ].map(item => (
           <div key={item.label} className="bg-slate-900/40 rounded-lg p-2.5">
             <div className="text-[10px] text-slate-500 mb-0.5">{item.label}</div>
@@ -103,17 +110,29 @@ function RunDetail({ run }: { run: PipelineRun }) {
   )
 }
 
-export default function RunsPage() {
-  const { data: runs = [], mutate } = useSWR<PipelineRun[]>('/api/runs?limit=100', fetcher, { refreshInterval: 15000 })
-  const [focusedRunId, setFocusedRunId] = useState<string | null>(null)
-  const { data: focusedRun } = useSWR<PipelineRun>(focusedRunId ? `/api/runs/${encodeURIComponent(focusedRunId)}` : null, fetcher)
+function RunsContent() {
+  const params = useSearchParams()
+  const focusedRunId = params.get('runId')
+  const pipelineId = params.get('pipelineId')
+  const from = params.get('from')
+  const date = params.get('date')
+  const [statusFilter, setStatusFilter] = useState('all')
+  const query = new URLSearchParams({ limit: '500' })
+  if (pipelineId) query.set('pipelineId', pipelineId)
+  if (from) query.set('from', from)
+  if (date) query.set('date', date)
+  if (statusFilter !== 'all') query.set('status', statusFilter)
+  const { data: runs = [], error, isLoading, mutate } = useSWR<PipelineRun[]>(`/api/runs?${query}`, fetchList, { refreshInterval: 15000 })
+  const { data: focusedRun, error: focusedError, isLoading: focusedLoading } = useSWR<PipelineRun>(
+    focusedRunId ? `/api/runs/${encodeURIComponent(focusedRunId)}` : null, fetchJson, { refreshInterval: 15000 }
+  )
   const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState<string>('all')
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [pollError, setPollError] = useState('')
 
   useEffect(() => {
-    setFocusedRunId(new URLSearchParams(window.location.search).get('runId'))
-  }, [])
+    setStatusFilter(params.get('status') ?? 'all')
+  }, [params])
 
   useEffect(() => {
     const activeRuns = runs.filter(item =>
@@ -123,15 +142,15 @@ export default function RunsPage() {
     if (activeRuns.length === 0) return
     const poll = () => Promise.all(activeRuns.map(run => {
       const endpoint = run.executionMode === 'argocd' ? 'argocd' : 'jenkins'
-      return fetch(`/api/runs/${run.id}/${endpoint}`)
-    })).then(() => mutate()).catch(() => {})
+      return fetchJson(`/api/runs/${encodeURIComponent(run.id)}/${endpoint}`)
+    })).then(() => { setPollError(''); return mutate() }).catch(() => setPollError('Unable to refresh external run status. Displayed results may be stale.'))
     poll()
     const timer = window.setInterval(poll, 5000)
     return () => window.clearInterval(timer)
   }, [runs, mutate])
 
   const filtered = runs.filter(r => {
-    const matchStatus = statusFilter === 'all' || r.status === statusFilter
+    const matchStatus = statusFilter === 'all' || (statusFilter === 'completed' ? r.status === 'success' || r.status === 'failed' : r.status === statusFilter)
     const q = search.toLowerCase()
     const matchSearch = !q || r.repoFullName.toLowerCase().includes(q) || r.pipelineName.toLowerCase().includes(q) || r.branch.toLowerCase().includes(q) || r.commit.startsWith(q) || r.author.toLowerCase().includes(q)
     return matchStatus && matchSearch
@@ -139,6 +158,13 @@ export default function RunsPage() {
 
   return (
     <div className="space-y-4 max-w-screen-2xl">
+      {error && <p role="alert" className="text-sm text-red-400">Unable to load runs. Refresh to retry; displayed results may be stale.</p>}
+      {pollError && <p role="alert" className="text-sm text-red-400">{pollError}</p>}
+      {(pipelineId || from || date) && <p className="text-xs text-slate-400">
+        Filtered to {pipelineId ? `pipeline ${pipelineId}` : 'all pipelines'}{from ? ` since ${from}` : ''}{date ? ` on ${date} (UTC)` : ''}.
+        {' '}<Link href="/runs" className="text-emerald-400 underline">Clear source filters</Link>
+      </p>}
+      <p className="text-xs text-slate-500">Showing up to 500 matching retained runs.</p>
       {/* Filters */}
       <div className="flex flex-wrap gap-3 items-center">
         <div className="relative flex-1 min-w-48">
@@ -151,9 +177,10 @@ export default function RunsPage() {
         </div>
         <div className="flex items-center gap-1.5">
           <Filter className="w-3.5 h-3.5 text-slate-500" />
-          {['all', 'success', 'failed', 'running', 'pending'].map(s => (
+          {['all', 'completed', 'success', 'failed', 'running', 'pending', 'cancelled'].map(s => (
             <button
               key={s}
+              aria-pressed={statusFilter === s}
               onClick={() => setStatusFilter(s)}
               className={cn(
                 'text-[10px] font-bold px-2 py-1 rounded-lg capitalize transition-colors',
@@ -162,7 +189,9 @@ export default function RunsPage() {
             >{s}</button>
           ))}
         </div>
+        <button onClick={() => mutate()} className="text-xs text-slate-400 hover:text-white">Refresh runs</button>
         <button
+          disabled={isLoading || Boolean(error) || filtered.length === 0}
           onClick={() => exportCsv(filtered.map(r => ({ repo: r.repoFullName, pipeline: r.pipelineName, branch: r.branch, commit: r.commit, status: r.status, duration: r.durationMs, started: r.startedAt })), 'runs.csv')}
           className="flex items-center gap-1.5 text-[10px] font-medium text-slate-500 hover:text-white px-3 py-2 rounded-lg border border-slate-800 hover:border-slate-700 transition-colors"
         >
@@ -170,6 +199,8 @@ export default function RunsPage() {
         </button>
       </div>
 
+      {focusedLoading && <p role="status" className="text-sm text-slate-400">Loading referenced run...</p>}
+      {focusedError && <p role="alert" className="text-sm text-red-400">The referenced run could not be loaded. It may have been removed from retained history.</p>}
       {focusedRun && (
         <section className="bg-[#0d1117] border border-emerald-500/30 rounded-xl p-4" aria-label="Referenced pipeline run">
           <div className="text-xs font-semibold text-white mb-3">Referenced run · {focusedRun.id}</div>
@@ -193,7 +224,7 @@ export default function RunsPage() {
             </thead>
             <tbody className="divide-y divide-slate-800/40">
               {filtered.map(run => (
-                <>
+                <Fragment key={run.id}>
                   <tr
                     key={run.id}
                     onClick={() => setExpandedId(expandedId === run.id ? null : run.id)}
@@ -206,7 +237,10 @@ export default function RunsPage() {
                       </div>
                     </td>
                     <td className="px-4 py-3">
-                      <div className="font-medium text-white">{run.pipelineName}</div>
+                      <button type="button" aria-expanded={expandedId === run.id} onClick={event => {
+                        event.stopPropagation()
+                        setExpandedId(expandedId === run.id ? null : run.id)
+                      }} className="font-medium text-white hover:underline text-left">{run.pipelineName}</button>
                       <div className="text-slate-500 text-[10px]">{run.repoFullName}</div>
                     </td>
                     <td className="px-4 py-3 hidden sm:table-cell">
@@ -224,10 +258,10 @@ export default function RunsPage() {
                       </td>
                     </tr>
                   )}
-                </>
+                </Fragment>
               ))}
-              {filtered.length === 0 && (
-                <tr><td colSpan={6} className="px-4 py-10 text-center text-slate-600">No runs match the current filter.</td></tr>
+              {!error && filtered.length === 0 && (
+                <tr><td colSpan={6} className="px-4 py-10 text-center text-slate-600">{isLoading ? 'Loading runs...' : 'No runs match the current filter.'}</td></tr>
               )}
             </tbody>
           </table>
@@ -235,4 +269,8 @@ export default function RunsPage() {
       </div>
     </div>
   )
+}
+
+export default function RunsPage() {
+  return <Suspense fallback={<p role="status">Loading runs...</p>}><RunsContent /></Suspense>
 }

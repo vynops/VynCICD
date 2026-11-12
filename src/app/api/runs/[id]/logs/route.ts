@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { loadRuns, appendStageLog } from '@/lib/data-store'
+import { requireRole } from '@/lib/auth'
 
 const RUNNER_SECRET = process.env.RUNNER_SECRET ?? process.env.VYNCICD_SECRET ?? ''
 
 function authRunner(req: NextRequest): boolean {
   const token = req.headers.get('x-runner-token') ?? ''
-  return !RUNNER_SECRET || token === RUNNER_SECRET
+  return Boolean(RUNNER_SECRET) && token === RUNNER_SECRET
 }
 
 // POST /api/runs/[id]/logs  — runner appends log lines to a stage
@@ -31,6 +32,10 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  if (!authRunner(req)) {
+    const auth = await requireRole(req, 'viewer')
+    if (auth instanceof NextResponse) return auth
+  }
   const { id } = await params
   const stage = req.nextUrl.searchParams.get('stage')
   const runs = loadRuns()

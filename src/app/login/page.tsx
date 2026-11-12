@@ -22,11 +22,11 @@ export default function LoginPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
       })
-      const data = await res.json() as { ok?: boolean; error?: string }
+      const data = await res.json() as { ok?: boolean; error?: string; mustChangePassword?: boolean }
       if (!res.ok) {
         setError(data.error ?? 'Login failed')
       } else {
-        router.push('/overview')
+        router.push(data.mustChangePassword ? '/change-password' : '/overview')
         router.refresh()
       }
     } catch {
@@ -52,6 +52,7 @@ export default function LoginPage() {
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="bg-[#111827] border border-slate-800 rounded-2xl p-6 space-y-4">
+          <h2 className="text-center text-lg font-bold text-white">Sign In</h2>
           {error && (
             <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-xs">
               <AlertCircle className="w-4 h-4 flex-shrink-0" />
@@ -90,11 +91,6 @@ export default function LoginPage() {
             {loading ? <><Loader2 size={14} className="animate-spin" /> Signing in...</> : 'Sign In'}
           </button>
         </form>
-
-        <div className="mt-6 rounded-xl border border-slate-800 bg-slate-900/40 px-4 py-3 text-xs text-slate-500 space-y-1.5">
-          <p className="font-semibold text-slate-400">First-time setup</p>
-          <p>Set <span className="font-mono text-slate-400">VYNCICD_ADMIN_EMAIL</span> and <span className="font-mono text-slate-400">VYNCICD_ADMIN_PASSWORD</span> in <span className="font-mono text-slate-400">.env.local</span> — the admin account is created automatically on first boot.</p>
-        </div>
 
         <p className="text-center text-xs text-slate-600 mt-4">
           Part of the{' '}

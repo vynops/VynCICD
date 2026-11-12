@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
   const deployFrequency = Math.round((recentDeps.length / 30) * 7 * 10) / 10
 
   // DORA — Lead Time (avg duration of successful runs as proxy)
-  const successRuns = recentRuns.filter(r => r.status === 'success' && r.durationMs)
+  const successRuns = recentRuns.filter(r => r.status === 'success' && r.durationMs != null)
   const leadTimeHours = successRuns.length > 0
     ? Math.round(successRuns.reduce((s, r) => s + (r.durationMs! / 3600000), 0) / successRuns.length * 10) / 10
     : 0
@@ -45,7 +45,8 @@ export async function GET(req: NextRequest) {
     : null
 
   // DORA — Change Failure Rate
-  const total = recentRuns.length
+  const completedRuns = recentRuns.filter(r => r.status === 'success' || r.status === 'failed')
+  const total = completedRuns.length
   const failed = recentRuns.filter(r => r.status === 'failed').length
   const changeFailureRate = total > 0 ? Math.round((failed / total) * 100 * 10) / 10 : 0
 
@@ -76,15 +77,16 @@ export async function GET(req: NextRequest) {
   }
 
   // Top failing pipelines
-  const pipelineStats: Record<string, { name: string; runs: number; failed: number }> = {}
-  for (const r of recentRuns) {
-    if (!pipelineStats[r.pipelineId]) pipelineStats[r.pipelineId] = { name: r.pipelineName, runs: 0, failed: 0 }
-    pipelineStats[r.pipelineId].runs++
-    if (r.status === 'failed') pipelineStats[r.pipelineId].failed++
+  const pipelineStats = new Map<string, { pipelineId: string; name: string; runs: number; failed: number }>()
+  for (const r of completedRuns) {
+    const stats = pipelineStats.get(r.pipelineId) ?? { pipelineId: r.pipelineId, name: r.pipelineName, runs: 0, failed: 0 }
+    pipelineStats.set(r.pipelineId, stats)
+    stats.runs++
+    if (r.status === 'failed') stats.failed++
   }
-  const topFailingPipelines = Object.values(pipelineStats)
+  const topFailingPipelines = [...pipelineStats.values()]
     .filter(p => p.runs > 0 && p.failed > 0)
-    .map(p => ({ name: p.name, failRate: (p.failed / p.runs) * 100, runs: p.runs }))
+    .map(p => ({ pipelineId: p.pipelineId, name: p.name, failRate: (p.failed / p.runs) * 100, runs: p.runs }))
     .sort((a, b) => b.failRate - a.failRate)
     .slice(0, 5)
 
@@ -93,6 +95,8 @@ export async function GET(req: NextRequest) {
     leadTimeHours,
     mttrMinutes,
     changeFailureRate,
+    sampleCounts: { successfulRuns: successRuns.length, completedRuns: total, deployments: recentDeps.length },
+    from: new Date(thirtyDaysAgo).toISOString(),
     targets: {
       deploymentFrequency: settings.deploymentFrequencyTarget,
       leadTimeHours: settings.leadTimeTargetHours,

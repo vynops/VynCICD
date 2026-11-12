@@ -18,11 +18,11 @@ export async function GET(req: NextRequest) {
   const recentRuns = runs.filter(r => new Date(r.startedAt).getTime() > thirtyDaysAgo)
 
   const deployFrequency = Math.round((recentDeps.length / 30) * 7 * 10) / 10
-  const successRuns = recentRuns.filter(r => r.status === 'success' && r.durationMs)
+  const successRuns = recentRuns.filter(r => r.status === 'success' && r.durationMs != null)
   const leadTimeHours = successRuns.length > 0
     ? Math.round(successRuns.reduce((s, r) => s + (r.durationMs! / 3600000), 0) / successRuns.length * 10) / 10
     : 0
-  const total = recentRuns.length
+  const total = recentRuns.filter(r => r.status === 'success' || r.status === 'failed').length
   const failed = recentRuns.filter(r => r.status === 'failed').length
   const changeFailureRate = total > 0 ? Math.round((failed / total) * 100 * 10) / 10 : 0
 
@@ -46,6 +46,8 @@ export async function GET(req: NextRequest) {
     leadTimeHours,
     mttrMinutes,
     changeFailureRate,
+    sampleCounts: { successfulRuns: successRuns.length, completedRuns: total, deployments: recentDeps.length },
+    from: new Date(thirtyDaysAgo).toISOString(),
     targets: {
       deploymentFrequency: settings.deploymentFrequencyTarget,
       leadTimeHours: settings.leadTimeTargetHours,

@@ -3,7 +3,8 @@
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useState } from 'react'
-import useSWR from 'swr'
+import useSWR, { useSWRConfig } from 'swr'
+import { fetchJson } from '@/lib/fetch-json'
 import {
   LayoutDashboard, GitBranch, Play, BookOpen, Layers,
   Rocket, Shield, BarChart2, AlertTriangle, Phone,
@@ -68,8 +69,6 @@ const BOTTOM_ITEMS: NavItem[] = [
   { href: '/settings', label: 'Settings', icon: Settings },
 ]
 
-const fetcher = (url: string) => fetch(url).then(r => r.json())
-
 function NavLink({ item, active, onClick }: { item: NavItem; active: boolean; onClick?: () => void }) {
   const Icon = item.icon
   return (
@@ -92,12 +91,24 @@ function NavLink({ item, active, onClick }: { item: NavItem; active: boolean; on
 
 function SidebarContent({ pathname, onClose }: { pathname: string; onClose?: () => void }) {
   const router = useRouter()
-  const { data: me } = useSWR('/api/auth/me', fetcher)
+  const { data: me, error: accountError } = useSWR<{ name: string; role: string }>('/api/auth/me', fetchJson)
+  const { mutate } = useSWRConfig()
+  const [logoutError, setLogoutError] = useState('')
+  const [loggingOut, setLoggingOut] = useState(false)
 
   const handleLogout = async () => {
-    await fetch('/api/auth/logout', { method: 'POST' })
-    router.push('/login')
-    router.refresh()
+    setLogoutError('')
+    setLoggingOut(true)
+    try {
+      await fetchJson('/api/auth/logout', { method: 'POST' })
+      await mutate(key => typeof key === 'string' && key.startsWith('/api/'), undefined, { revalidate: false })
+      router.push('/login')
+      router.refresh()
+    } catch {
+      setLogoutError('Sign out failed. Please retry.')
+    } finally {
+      setLoggingOut(false)
+    }
   }
 
   return (
@@ -152,10 +163,11 @@ function SidebarContent({ pathname, onClose }: { pathname: string; onClose?: () 
             <div className="text-[11px] font-bold text-white truncate">{me?.name ?? '…'}</div>
             <div className="text-[9px] text-slate-500 uppercase font-bold tracking-wider truncate">{me?.role ?? ''}</div>
           </div>
-          <button onClick={handleLogout} title="Sign out" className="text-slate-500 hover:text-red-400 transition-colors">
+          <button onClick={handleLogout} disabled={loggingOut} title="Sign out" className="text-slate-500 hover:text-red-400 transition-colors">
             <LogOut className="w-4 h-4" />
           </button>
         </div>
+        {(accountError || logoutError) && <p role="alert" className="text-xs text-red-400">{logoutError || 'Unable to load account details.'}</p>}
         <div className="px-2 pt-1 pb-0.5">
           <p className="text-[9px] text-slate-600 font-medium tracking-wide">Part of <span className="text-slate-500">VynOps Suite</span></p>
         </div>
@@ -177,6 +189,7 @@ export default function Sidebar() {
 
       {/* Mobile: hamburger */}
       <button
+        aria-label="Open navigation"
         onClick={() => setMobileOpen(true)}
         className="lg:hidden fixed top-4 left-4 z-40 w-9 h-9 flex items-center justify-center rounded-lg bg-[#0d1117] border border-slate-800 text-slate-400 hover:text-white shadow"
       >

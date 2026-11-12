@@ -25,6 +25,7 @@ import { promisify } from 'node:util'
 import { mkdirSync, rmSync, existsSync } from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
+import { executeSecurityScans } from './security-scan.mjs'
 
 const execFileAsync = promisify(execFile)
 
@@ -81,16 +82,9 @@ async function getRuntimeSettings() {
     cachedSettingsAt = Date.now()
   } catch (err) {
     console.error(`[runner] settings fetch error: ${err.message}`)
+    if (!cachedSettings) throw err
   }
-  return cachedSettings ?? {
-    trivyEnabled: true,
-    secretScanEnabled: true,
-    sbomEnabled: true,
-    blockOnCriticalCves: true,
-    defaultRetryCount: 2,
-    defaultTimeoutMinutes: 30,
-    buildConcurrency: 4,
-  }
+  return cachedSettings
 }
 
 // ── CI env vars & template resolution ────────────────────────────────────────
@@ -201,54 +195,13 @@ async function executeStage(run, stage, workDir, settings) {
       durationMs = result.durationMs
 
     } else if (type === 'scan') {
-      if (!settings.trivyEnabled) {
-        onLines(['[trivy] scanning disabled in Settings'])
-        skipped = true
-      } else {
-      // Resolve image template — defaults to the built image for this run
-      const rawImage = stage.image ?? '${IMAGE}'
-      const image = resolveTemplate(rawImage, env)
-      onLines([`[trivy] scanning image: ${image}`])
-      const result = await runCommand(
-        'docker',
-        ['run', '--rm', '-v', '/var/run/docker.sock:/var/run/docker.sock',
-         'aquasec/trivy:latest', 'image', '--exit-code', settings.blockOnCriticalCves ? '1' : '0',
-         '--severity', 'CRITICAL,HIGH', '--format', 'table', image],
-        { cwd: workDir, env },
-        onLines,
-        timeoutMs
-      )
+      const result = await executeSecurityScans({
+        run, stage, workDir, settings, env, timeoutMs, runCommand, onLines,
+        reportScan: scan => apiFetch('/api/security', { method: 'POST', body: JSON.stringify(scan) }),
+      })
       exitCode = result.exitCode
       durationMs = result.durationMs
-
-      if (exitCode === 0 && settings.secretScanEnabled) {
-        const secretResult = await runCommand(
-          'docker',
-          ['run', '--rm', '-v', `${workDir}:/workspace`, 'aquasec/trivy:latest', 'fs',
-           '--scanners', 'secret', '--exit-code', settings.blockOnCriticalCves ? '1' : '0', '/workspace'],
-          { cwd: workDir, env },
-          onLines,
-          timeoutMs
-        )
-        exitCode = secretResult.exitCode
-        durationMs += secretResult.durationMs
-      }
-
-      if (exitCode === 0 && settings.sbomEnabled) {
-        const sbomPath = path.join(workDir, `${name}-sbom.json`)
-        const sbomResult = await runCommand(
-          'docker',
-          ['run', '--rm', '-v', '/var/run/docker.sock:/var/run/docker.sock', '-v', `${workDir}:/workspace`,
-           'aquasec/trivy:latest', 'image', '--format', 'cyclonedx', '--output', `/workspace/${name}-sbom.json`, image],
-          { cwd: workDir, env },
-          onLines,
-          timeoutMs
-        )
-        exitCode = sbomResult.exitCode
-        durationMs += sbomResult.durationMs
-        if (existsSync(sbomPath)) onLines([`[trivy] SBOM generated: ${sbomPath}`])
-      }
-      }
+      skipped = result.skipped
 
     } else if (type === 'deploy') {
       const stageEnv = stage.environment ?? run.environment ?? 'dev'

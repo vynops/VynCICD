@@ -5,8 +5,11 @@ import { RefreshCw, LogOut, Bell } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import useSWR from 'swr'
+import { useSWRConfig } from 'swr'
+import { useState } from 'react'
+import { fetchJson, fetchList } from '@/lib/fetch-json'
+import type { Incident } from '@/lib/oncall-store'
 
-const fetcher = (url: string) => fetch(url).then(r => r.json())
 
 const TITLES: Record<string, string> = {
   '/overview':     'Overview',
@@ -47,15 +50,28 @@ export default function Header() {
   const router = useRouter()
   const title = TITLES[pathname] ?? 'VynCICD'
   const description = DESCRIPTIONS[pathname]
+  const { mutate } = useSWRConfig()
+  const [logoutError, setLogoutError] = useState('')
+  const [loggingOut, setLoggingOut] = useState(false)
 
-  const { data: incidents } = useSWR('/api/incidents', fetcher, { refreshInterval: 30000 })
+  const { data: incidents, error: incidentError } = useSWR<Incident[]>('/api/incidents', fetchList, { refreshInterval: 30000 })
   const openCount = Array.isArray(incidents)
     ? incidents.filter((i: { status: string }) => i.status !== 'resolved').length
     : 0
 
   async function handleLogout() {
-    await fetch('/api/auth/logout', { method: 'POST' })
-    router.push('/login')
+    setLogoutError('')
+    setLoggingOut(true)
+    try {
+      await fetchJson('/api/auth/logout', { method: 'POST' })
+      await mutate(key => typeof key === 'string' && key.startsWith('/api/'), undefined, { revalidate: false })
+      router.push('/login')
+      router.refresh()
+    } catch {
+      setLogoutError('Sign out failed. Please retry.')
+    } finally {
+      setLoggingOut(false)
+    }
   }
 
   return (
@@ -65,6 +81,8 @@ export default function Header() {
         {description && <p className="text-xs text-slate-400 mt-1 leading-tight">{description}</p>}
       </div>
       <div className="flex items-center gap-2">
+        {logoutError && <span role="alert" className="text-xs text-red-400">{logoutError}</span>}
+        {incidentError && <span role="alert" className="text-xs text-red-400">Incident count unavailable</span>}
         <button
           onClick={() => window.location.reload()}
           className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-500 hover:text-white hover:bg-slate-800 transition-colors"
@@ -73,7 +91,7 @@ export default function Header() {
           <RefreshCw className="w-4 h-4" />
         </button>
         <Link
-          href="/incidents"
+          href="/incidents?status=open"
           title={openCount > 0 ? `${openCount} open incident${openCount > 1 ? 's' : ''}` : 'Incidents'}
           className="relative w-8 h-8 flex items-center justify-center rounded-lg text-slate-500 hover:text-white hover:bg-slate-800 transition-colors"
         >
@@ -84,6 +102,7 @@ export default function Header() {
         </Link>
         <button
           onClick={handleLogout}
+          disabled={loggingOut}
           title="Sign out"
           className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
         >

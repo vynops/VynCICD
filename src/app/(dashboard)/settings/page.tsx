@@ -1,14 +1,16 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { Suspense, useState, useEffect, useRef } from 'react'
+import { useSearchParams } from 'next/navigation'
 import useSWR from 'swr'
 import { Save, Loader2, Server, Shield, Bell, Bot, BarChart2, Settings2, Activity, Eye, EyeOff, CheckCircle2, XCircle, Wifi } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { AppSettings } from '@/lib/settings-store'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
-
-const fetcher = (url: string) => fetch(url).then(r => r.json())
-const CONFIGURED_MASK = '***configured***'
+import Link from 'next/link'
+import { fetchJson } from '@/lib/fetch-json'
+import { CONFIGURED_MASK, SECRET_SETTING_FIELDS } from '@/lib/settings-fields'
+import type { CopilotUsageSummary } from '@/lib/copilot-usage'
 
 const TABS = [
   { id: 'k8s',        label: 'Kubernetes',      icon: Server },
@@ -27,12 +29,6 @@ const AI_PROVIDERS = [
     keyLabel: 'Groq API Key',
     keyPlaceholder: 'gsk_...',
     defaultModel: 'openai/gpt-oss-120b',
-    models: [
-      { value: 'openai/gpt-oss-120b', label: 'GPT OSS 120B' },
-      { value: 'openai/gpt-oss-20b', label: 'GPT OSS 20B (Fast)' },
-      { value: 'groq/compound', label: 'Groq Compound' },
-      { value: 'groq/compound-mini', label: 'Groq Compound Mini' },
-    ],
   },
   {
     id: 'openai',
@@ -40,11 +36,6 @@ const AI_PROVIDERS = [
     keyLabel: 'OpenAI API Key',
     keyPlaceholder: 'sk-...',
     defaultModel: 'gpt-4o-mini',
-    models: [
-      { value: 'gpt-4o', label: 'GPT-4o' },
-      { value: 'gpt-4o-mini', label: 'GPT-4o Mini' },
-      { value: 'gpt-4.1-mini', label: 'GPT-4.1 Mini' },
-    ],
   },
   {
     id: 'anthropic',
@@ -52,11 +43,6 @@ const AI_PROVIDERS = [
     keyLabel: 'Claude API Key',
     keyPlaceholder: 'sk-ant-...',
     defaultModel: 'claude-3-5-sonnet-latest',
-    models: [
-      { value: 'claude-3-5-sonnet-latest', label: 'Claude 3.5 Sonnet' },
-      { value: 'claude-3-7-sonnet-latest', label: 'Claude 3.7 Sonnet' },
-      { value: 'claude-3-5-haiku-latest', label: 'Claude 3.5 Haiku' },
-    ],
   },
   {
     id: 'google',
@@ -64,11 +50,6 @@ const AI_PROVIDERS = [
     keyLabel: 'Gemini API Key',
     keyPlaceholder: 'AIza...',
     defaultModel: 'gemini-2.0-flash',
-    models: [
-      { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
-      { value: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro' },
-      { value: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash' },
-    ],
   },
   {
     id: 'custom',
@@ -76,7 +57,6 @@ const AI_PROVIDERS = [
     keyLabel: 'API Key',
     keyPlaceholder: 'your-api-key',
     defaultModel: 'your-model-id',
-    models: [] as Array<{ value: string; label: string }>,
   },
 ] as const
 
@@ -117,6 +97,7 @@ function RevealInput({ value, onChange, placeholder, readOnly }: { value: string
     <div className="relative">
       <input
         type={shown ? 'text' : 'password'}
+        autoComplete="off"
         value={value}
         onChange={e => !readOnly && onChange(e.target.value)}
         placeholder={placeholder}
@@ -142,10 +123,10 @@ function NumberInput({ value, onChange, min, max }: { value: number; onChange: (
 function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
   return (
     <label className="flex items-center gap-3 cursor-pointer">
-      <div onClick={() => onChange(!checked)}
+      <button type="button" role="switch" aria-checked={checked} aria-label={label} onClick={() => onChange(!checked)}
         className={cn('w-10 h-5 rounded-full transition-colors flex items-center px-0.5', checked ? 'bg-emerald-500' : 'bg-slate-700')}>
         <div className={cn('w-4 h-4 rounded-full bg-white shadow transition-transform', checked ? 'translate-x-5' : 'translate-x-0')} />
-      </div>
+      </button>
       <span className="text-sm text-slate-300">{label}</span>
     </label>
   )
@@ -153,17 +134,28 @@ function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: 
 
 const TooltipStyle = { backgroundColor: '#0d1117', border: '1px solid #1e293b', borderRadius: 8, fontSize: 11 }
 
-export default function SettingsPage() {
-  const { data: rawSettings } = useSWR<AppSettings>('/api/settings', fetcher)
-  const { data: usageData }   = useSWR('/api/copilot/usage', fetcher, { refreshInterval: 30000 })
+function SettingsContent() {
+  const params = useSearchParams()
+  const { data: rawSettings, error: settingsError, mutate } = useSWR<AppSettings>('/api/settings', fetchJson)
+  const { data: usageData, error: usageError, isLoading: usageLoading } = useSWR<CopilotUsageSummary>('/api/copilot/usage', fetchJson, { refreshInterval: 30000 })
+  const { data: account } = useSWR<{ role: string }>('/api/auth/me', fetchJson)
+  const isAdmin = account?.role === 'admin'
   const [tab, setTab] = useState('k8s')
   const [form, setForm] = useState<Partial<AppSettings>>({})
   const [saved, setSaved]   = useState(false)
   const [saving, setSaving] = useState(false)
+  const [dirty, setDirty] = useState(false)
+  const [saveError, setSaveError] = useState('')
   const [testResults, setTestResults] = useState<Record<string, { loading: boolean; success?: boolean; message?: string; suggestedUrl?: string }>>({})
+  const formRevision = useRef(0)
 
   useEffect(() => {
-    if (!rawSettings) return
+    const requested = params.get('tab')
+    if (requested && TABS.some(item => item.id === requested)) setTab(requested)
+  }, [params])
+
+  useEffect(() => {
+    if (!rawSettings || dirty) return
     const hasStoredAiKey = Boolean((rawSettings.aiApiKey ?? '').trim()) || Boolean((rawSettings.groqApiKey ?? '').trim())
     setForm({
       ...rawSettings,
@@ -172,11 +164,18 @@ export default function SettingsPage() {
       registryPassword: rawSettings.registryPassword ? CONFIGURED_MASK : '',
       jenkinsApiToken: rawSettings.jenkinsApiToken ? CONFIGURED_MASK : '',
     })
-  }, [rawSettings])
+  }, [rawSettings, dirty])
 
-  const update = <K extends keyof AppSettings>(key: K, val: AppSettings[K]) => setForm(f => ({ ...f, [key]: val }))
+  const update = <K extends keyof AppSettings>(key: K, val: AppSettings[K]) => {
+    formRevision.current += 1
+    setDirty(true)
+    setSaved(false)
+    setTestResults({})
+    setForm(f => ({ ...f, [key]: val }))
+  }
 
   async function testConnection(key: string, endpoint: string, body: Record<string, unknown>) {
+    const revision = formRevision.current
     setTestResults(prev => ({ ...prev, [key]: { loading: true } }))
     try {
       const res = await fetch(endpoint, {
@@ -184,17 +183,19 @@ export default function SettingsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })
-      const data = await res.json() as { success?: boolean; ok?: boolean; message?: string; suggestedUrl?: string }
+      const data = await res.json() as { success?: boolean; ok?: boolean; message?: string; error?: string; suggestedUrl?: string }
+      if (revision !== formRevision.current) return
       setTestResults(prev => ({
         ...prev,
         [key]: {
           loading: false,
-          success: data.success ?? data.ok ?? res.ok,
-          message: data.message ?? (res.ok ? 'Connection successful' : 'Connection failed'),
+          success: res.ok && (data.success === true || data.ok === true),
+          message: data.message ?? data.error ?? 'Connection test did not confirm success.',
           suggestedUrl: data.suggestedUrl,
         },
       }))
     } catch {
+      if (revision !== formRevision.current) return
       setTestResults(prev => ({ ...prev, [key]: { loading: false, success: false, message: 'Network error' } }))
     }
   }
@@ -202,10 +203,15 @@ export default function SettingsPage() {
   function TestConnBtn({ id, endpoint, body, label = 'Test connection' }: { id: string; endpoint: string; body: Record<string, unknown>; label?: string }) {
     const r = testResults[id]
     return (
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        {isAdmin && dirty && id !== 'ai' && (
+          <span role="status" className="text-[10px] text-amber-400">
+            {saving ? 'Saving settings...' : 'Save Changes first to test the updated settings.'}
+          </span>
+        )}
         {r && !r.loading && (
           <div className="flex items-center gap-2 flex-wrap">
-            <span className={cn('flex items-center gap-1 text-[10px]', r.success ? 'text-emerald-400' : 'text-red-400')}>
+            <span role={r.success ? 'status' : 'alert'} className={cn('flex items-center gap-1 text-[10px]', r.success ? 'text-emerald-400' : 'text-red-400')}>
               {r.success ? <CheckCircle2 className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
               {r.message}
             </span>
@@ -220,45 +226,48 @@ export default function SettingsPage() {
             )}
           </div>
         )}
-        <button onClick={() => testConnection(id, endpoint, body)} disabled={r?.loading}
-          className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-medium bg-slate-800 border border-slate-700 text-slate-400 hover:text-white hover:border-slate-500 disabled:opacity-50 transition-colors">
+        <button onClick={() => testConnection(id, endpoint, body)} disabled={r?.loading || (dirty && id !== 'ai') || saving || !isAdmin}
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-medium bg-slate-800 border border-slate-700 text-slate-400 hover:text-white hover:border-slate-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
           {r?.loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wifi className="w-3 h-3" />}
-          {label}
+          {r?.loading ? 'Testing...' : label}
         </button>
       </div>
     )
   }
 
   async function save() {
+    setSaveError('')
+    setSaved(false)
     setSaving(true)
     const payload: Partial<AppSettings> = { ...form }
-    if ((payload.aiApiKey ?? '') === CONFIGURED_MASK) delete payload.aiApiKey
-    if ((payload.k8sToken ?? '') === CONFIGURED_MASK) delete payload.k8sToken
-    if ((payload.registryPassword ?? '') === CONFIGURED_MASK) delete payload.registryPassword
-    if ((payload.jenkinsApiToken ?? '') === CONFIGURED_MASK) delete payload.jenkinsApiToken
-    await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
-    setSaving(false)
-    setSaved(true)
-    setForm(prev => ({
-      ...prev,
-      aiApiKey: (prev.aiApiKey ?? '') ? CONFIGURED_MASK : '',
-      k8sToken: (prev.k8sToken ?? '') ? CONFIGURED_MASK : '',
-      registryPassword: (prev.registryPassword ?? '') ? CONFIGURED_MASK : '',
-      jenkinsApiToken: (prev.jenkinsApiToken ?? '') ? CONFIGURED_MASK : '',
-    }))
-    setTimeout(() => setSaved(false), 3000)
+    for (const key of SECRET_SETTING_FIELDS) {
+      if (payload[key] === CONFIGURED_MASK) delete payload[key]
+    }
+    try {
+      const updated = await fetchJson<AppSettings>('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+      await mutate(updated, { revalidate: false })
+      setDirty(false)
+      setSaved(true)
+      setTimeout(() => setSaved(false), 3000)
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : 'Unable to save settings.')
+    } finally {
+      setSaving(false)
+    }
   }
 
   const providerId = form.aiProvider ?? 'groq'
   const currentProvider = AI_PROVIDERS.find(p => p.id === providerId) ?? AI_PROVIDERS[0]
-  const availableModels = currentProvider.models.length > 0
-    ? currentProvider.models
-    : [{ value: form.aiModel ?? currentProvider.defaultModel, label: `${form.aiModel ?? currentProvider.defaultModel} (custom)` }]
 
+  if (settingsError && !rawSettings) return <p role="alert" className="text-sm text-red-400">Unable to load settings. <button onClick={() => mutate()} className="underline">Retry</button></p>
   if (!rawSettings) return <div className="flex items-center justify-center h-64 text-slate-600 text-sm">Loading settings…</div>
 
   return (
     <div className="max-w-screen-xl space-y-4">
+      {settingsError && <p role="alert" className="text-sm text-red-400">Settings could not be refreshed; displayed values may be stale.</p>}
+      {saveError && <p role="alert" className="text-sm text-red-400">{saveError}</p>}
+      {!isAdmin && <p className="text-xs text-slate-400">Read-only settings. An administrator is required to save changes or test integrations.</p>}
+      {dirty && <p role="status" className="text-xs text-amber-400">Unsaved changes. Save settings before running connection or notification tests.</p>}
       {/* Tabs */}
       <div className="flex flex-wrap gap-1.5 bg-[#0d1117] border border-slate-800/60 rounded-xl p-2">
         {TABS.map(t => {
@@ -275,7 +284,7 @@ export default function SettingsPage() {
         })}
       </div>
 
-      <div className="bg-[#0d1117] border border-slate-800/60 rounded-xl p-5 space-y-5">
+      <fieldset disabled={!isAdmin || saving} className="bg-[#0d1117] border border-slate-800/60 rounded-xl p-5 space-y-5">
 
         {/* ── Kubernetes ── */}
         {tab === 'k8s' && (
@@ -352,11 +361,12 @@ export default function SettingsPage() {
         {tab === 'security' && (
           <>
             <h3 className="text-sm font-semibold text-white">Scanning</h3>
+            <Link href="/security" className="text-xs text-emerald-400 hover:underline">View scan findings and affected runs</Link>
             <div className="space-y-4">
               <Toggle checked={form.trivyEnabled ?? true} onChange={v => update('trivyEnabled', v)} label="Enable Trivy container image scanning" />
               <Toggle checked={form.secretScanEnabled ?? true} onChange={v => update('secretScanEnabled', v)} label="Enable secret detection in source code" />
               <Toggle checked={form.sbomEnabled ?? true} onChange={v => update('sbomEnabled', v)} label="Generate SBOM per build" />
-              <Toggle checked={form.blockOnCriticalCves ?? true} onChange={v => update('blockOnCriticalCves', v)} label="Block build on CRITICAL CVEs" />
+              <Toggle checked={form.blockOnCriticalCves ?? true} onChange={v => update('blockOnCriticalCves', v)} label="Block build on CRITICAL/HIGH vulnerabilities or detected secrets" />
             </div>
           </>
         )}
@@ -432,6 +442,7 @@ export default function SettingsPage() {
         {tab === 'ai' && (
           <>
             <h3 className="text-sm font-semibold text-white">AI Copilot</h3>
+            <Link href="/copilot" className="text-xs text-emerald-400 hover:underline">Open AI Copilot</Link>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Field label="AI Provider" source="settings.json">
                 <select
@@ -449,18 +460,15 @@ export default function SettingsPage() {
               <Field label={currentProvider.keyLabel} desc="Stored in settings.json unless provided by environment." source="settings.json">
                 <RevealInput value={form.aiApiKey ?? ''} onChange={v => update('aiApiKey', v)} placeholder={currentProvider.keyPlaceholder} />
               </Field>
-              <Field label="Model" source="settings.json">
-                <select value={form.aiModel ?? currentProvider.defaultModel} onChange={e => update('aiModel', e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-sm text-white focus:outline-none focus:border-emerald-500/50">
-                  {availableModels.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
-                </select>
+              <Field label="Model" desc="Enter the exact model ID supported by your provider. You can replace it when a model is retired." source="settings.json">
+                <Input value={form.aiModel ?? currentProvider.defaultModel} onChange={v => update('aiModel', v)} placeholder={currentProvider.defaultModel} />
               </Field>
               {providerId === 'custom' && (
                 <Field label="OpenAI-Compatible Base URL" desc="Example: https://api.example.com/v1" source="settings.json">
                   <Input value={form.aiBaseUrl ?? ''} onChange={v => update('aiBaseUrl', v)} placeholder="https://api.example.com/v1" />
                 </Field>
               )}
-              <Field label="AI Connection Test">
+              <Field label="AI Connection Test" desc="Test the entered AI settings without saving. Save Changes when you are ready; testing is optional.">
                 <div className="flex items-center gap-2">
                   <TestConnBtn
                     id="ai"
@@ -486,6 +494,7 @@ export default function SettingsPage() {
         {tab === 'dora' && (
           <>
             <h3 className="text-sm font-semibold text-white">DORA Performance Targets</h3>
+            <Link href="/analytics" className="text-xs text-emerald-400 hover:underline">View analytics against these targets</Link>
             <p className="text-[11px] text-slate-500 mb-4">Set your team&apos;s targets. These are used to colour-code your metrics dashboard.</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Field label="Deployment Frequency Target (per week)">
@@ -505,6 +514,8 @@ export default function SettingsPage() {
         )}
 
         {/* ── Token Usage ── */}
+        {tab === 'usage' && usageError && <p role="alert" className="text-sm text-red-400">Unable to load token usage. Refresh to retry.</p>}
+        {tab === 'usage' && usageLoading && <p role="status" className="text-sm text-slate-400">Loading token usage...</p>}
         {tab === 'usage' && usageData && (
           <>
             <h3 className="text-sm font-semibold text-white">AI Token Utilisation</h3>
@@ -536,12 +547,12 @@ export default function SettingsPage() {
             )}
           </>
         )}
-      </div>
+      </fieldset>
 
       {/* Save button */}
       {tab !== 'usage' && (
         <div className="flex justify-end">
-          <button onClick={save} disabled={saving}
+          <button onClick={save} disabled={saving || !isAdmin || !dirty}
             className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-white font-bold text-sm disabled:opacity-50 transition-colors">
             {saving ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Saving…</> : saved ? '✓ Saved!' : <><Save className="w-3.5 h-3.5" /> Save Settings</>}
           </button>
@@ -549,4 +560,8 @@ export default function SettingsPage() {
       )}
     </div>
   )
+}
+
+export default function SettingsPage() {
+  return <Suspense fallback={<p role="status">Loading settings...</p>}><SettingsContent /></Suspense>
 }

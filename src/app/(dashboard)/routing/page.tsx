@@ -4,9 +4,16 @@ import { useState } from 'react'
 import useSWR from 'swr'
 import { GitMerge, Plus, X, Trash2, Loader2, Pencil } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { fetchList } from '@/lib/fetch-json'
 import type { RoutingRule, EscalationPolicy } from '@/lib/oncall-store'
 
-const fetcher = (url: string) => fetch(url).then(r => r.json())
+async function requestJson(url: string, init: RequestInit) {
+  const response = await fetch(url, init)
+  const contentType = response.headers.get('Content-Type') ?? ''
+  const result = contentType.includes('application/json') ? await response.json() : null
+  if (response.redirected || !response.ok) throw new Error(result?.error ?? 'Unable to save routing configuration.')
+  return result
+}
 
 const SEV_OPTIONS = ['*', 'critical', 'high', 'medium', 'low']
 const CAT_OPTIONS = ['*', 'build-failure', 'deploy-failure', 'test-failure', 'security', 'performance', 'other']
@@ -23,23 +30,31 @@ function RuleModal({ rule, policies, onClose, onSave }: {
   const [oncall, setOncall]           = useState(rule?.notifyOncall ?? true)
   const [policyId, setPolicyId]       = useState(rule?.escalationPolicyId ?? '')
   const [saving, setSaving]           = useState(false)
+  const [error, setError]             = useState('')
 
   async function submit() {
-    if (!name.trim()) return
+    if (!name.trim()) { setError('Rule name is required.'); return }
+    if (policyId && !policies.some(policy => policy.id === policyId)) { setError('Select an available escalation policy.'); return }
     setSaving(true)
-    const body = {
-      name, severity, category,
-      notifyEmails: emails.split(',').map(s => s.trim()).filter(Boolean),
-      notifySlack: slack, notifyOncall: oncall, escalationPolicyId: policyId,
+    setError('')
+    try {
+      const body = {
+        name: name.trim(), severity, category,
+        notifyEmails: emails.split(',').map(s => s.trim()).filter(Boolean),
+        notifySlack: slack, notifyOncall: oncall, escalationPolicyId: policyId,
+      }
+      if (rule) {
+        await requestJson(`/api/routing/${rule.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      } else {
+        await requestJson('/api/routing', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      }
+      onSave()
+      onClose()
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : 'Unable to save the routing rule.')
+    } finally {
+      setSaving(false)
     }
-    if (rule) {
-      await fetch(`/api/routing/${rule.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-    } else {
-      await fetch('/api/routing', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-    }
-    setSaving(false)
-    onSave()
-    onClose()
   }
 
   return (
@@ -50,6 +65,7 @@ function RuleModal({ rule, policies, onClose, onSave }: {
           <button onClick={onClose}><X size={15} className="text-slate-500 hover:text-white" /></button>
         </div>
         <div className="space-y-4">
+          {error && <p role="alert" className="text-xs text-red-400">{error}</p>}
           <div>
             <label className="text-[11px] text-slate-400 block mb-1.5">Rule Name</label>
             <input value={name} onChange={e => setName(e.target.value)} placeholder="Critical deploy failures"
@@ -115,6 +131,7 @@ function PolicyModal({ policy, onClose, onSave }: {
     policy?.steps.map(s => ({ ...s, notifyEmails: s.notifyEmails.join(', ') })) ?? []
   )
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
 
   function addStep() { setSteps(p => [...p, { delayMin: 15, notifySlack: true, notifyOncall: true, notifyEmails: '' }]) }
   function removeStep(i: number) { setSteps(p => p.filter((_, j) => j !== i)) }
@@ -123,20 +140,30 @@ function PolicyModal({ policy, onClose, onSave }: {
   }
 
   async function submit() {
-    if (!name.trim()) return
+    if (!name.trim()) { setError('Policy name is required.'); return }
+    if (steps.some(step => !Number.isInteger(step.delayMin) || step.delayMin < 1)) {
+      setError('Escalation delays must be whole minutes greater than zero.')
+      return
+    }
     setSaving(true)
-    const body = {
-      name: name.trim(),
-      steps: steps.map(s => ({ ...s, notifyEmails: s.notifyEmails.split(',').map(e => e.trim()).filter(Boolean) })),
+    setError('')
+    try {
+      const body = {
+        name: name.trim(),
+        steps: steps.map(s => ({ ...s, notifyEmails: s.notifyEmails.split(',').map(e => e.trim()).filter(Boolean) })),
+      }
+      if (policy) {
+        await requestJson(`/api/routing/policies/${policy.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      } else {
+        await requestJson('/api/routing/policies', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      }
+      onSave()
+      onClose()
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : 'Unable to save the escalation policy.')
+    } finally {
+      setSaving(false)
     }
-    if (policy) {
-      await fetch(`/api/routing/policies/${policy.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-    } else {
-      await fetch('/api/routing/policies', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-    }
-    setSaving(false)
-    onSave()
-    onClose()
   }
 
   const inputCls = 'px-2 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500/50'
@@ -149,6 +176,7 @@ function PolicyModal({ policy, onClose, onSave }: {
             <h2 className="text-sm font-bold text-white">{policy ? 'Edit Escalation Policy' : 'New Escalation Policy'}</h2>
             <button onClick={onClose}><X size={15} className="text-slate-500 hover:text-white" /></button>
           </div>
+          {error && <p role="alert" className="text-xs text-red-400">{error}</p>}
 
           <div>
             <label className="text-[11px] text-slate-400 block mb-1.5">Policy Name</label>
@@ -208,25 +236,37 @@ function PolicyModal({ policy, onClose, onSave }: {
 }
 
 export default function RoutingPage() {
-  const { data: rules = [], mutate: muteRules } = useSWR<RoutingRule[]>('/api/routing', fetcher)
-  const { data: policies = [], mutate: mutePolicies } = useSWR<EscalationPolicy[]>('/api/routing/policies', fetcher)
+  const { data: ruleData, mutate: muteRules, error: rulesError, isLoading: rulesLoading } = useSWR<RoutingRule[]>('/api/routing', fetchList)
+  const { data: policyData, mutate: mutePolicies, error: policiesError, isLoading: policiesLoading } = useSWR<EscalationPolicy[]>('/api/routing/policies', fetchList)
+  const rules = ruleData ?? []
+  const policies = policyData ?? []
   const [editRule, setEditRule] = useState<RoutingRule | null>(null)
   const [showNew, setShowNew]   = useState(false)
   const [editPolicy, setEditPolicy] = useState<EscalationPolicy | null>(null)
   const [showNewPolicy, setShowNewPolicy] = useState(false)
+  const [actionError, setActionError] = useState('')
 
   async function deleteRule(id: string) {
-    if (id === 'default') { alert('Cannot delete the default rule.'); return }
+    if (id === 'default') { setActionError('Cannot delete the default rule.'); return }
     if (!confirm('Delete this routing rule?')) return
-    await fetch(`/api/routing/${id}`, { method: 'DELETE' })
-    muteRules()
+    setActionError('')
+    try {
+      await requestJson(`/api/routing/${id}`, { method: 'DELETE' })
+      await muteRules()
+    } catch (failure) {
+      setActionError(failure instanceof Error ? failure.message : 'Unable to delete the routing rule.')
+    }
   }
 
   async function deletePolicy(id: string) {
     if (!confirm('Delete this escalation policy?')) return
-    const res = await fetch(`/api/routing/policies/${id}`, { method: 'DELETE' })
-    if (!res.ok) { const d = await res.json() as { error?: string }; alert(d.error ?? 'Failed'); return }
-    mutePolicies()
+    setActionError('')
+    try {
+      await requestJson(`/api/routing/policies/${id}`, { method: 'DELETE' })
+      await Promise.all([mutePolicies(), muteRules()])
+    } catch (failure) {
+      setActionError(failure instanceof Error ? failure.message : 'Unable to delete the escalation policy.')
+    }
   }
 
   return (
@@ -240,6 +280,7 @@ export default function RoutingPage() {
           onClose={() => { setShowNewPolicy(false); setEditPolicy(null) }}
           onSave={() => mutePolicies()} />
       )}
+      {actionError && <p role="alert" className="text-xs text-red-400">{actionError}</p>}
 
       {/* Routing rules */}
       <section>
@@ -253,7 +294,11 @@ export default function RoutingPage() {
             <Plus className="w-3.5 h-3.5" /> New Rule
           </button>
         </div>
-        <div className="space-y-2">
+        {rulesError ? (
+          <div role="alert" className="text-xs text-red-300">Unable to load routing rules. <button onClick={() => muteRules()} className="underline hover:text-white">Retry</button></div>
+        ) : rulesLoading ? (
+          <div role="status" className="text-xs text-slate-500">Loading routing rules…</div>
+        ) : <div className="space-y-2">
           {rules.map(rule => (
             <div key={rule.id} className={cn('bg-[#0d1117] border rounded-xl p-4', rule.id === 'default' ? 'border-slate-700/40' : 'border-slate-800/60')}>
               <div className="flex items-start justify-between gap-3">
@@ -290,7 +335,9 @@ export default function RoutingPage() {
               </div>
             </div>
           ))}
+          {rules.length === 0 && <div className="text-xs text-slate-500 py-4">No routing rules configured.</div>}
         </div>
+        }
       </section>
 
       {/* Escalation policies */}
@@ -302,7 +349,11 @@ export default function RoutingPage() {
             <Plus className="w-3.5 h-3.5" /> New Policy
           </button>
         </div>
-        <div className="space-y-3">
+        {policiesError ? (
+          <div role="alert" className="text-xs text-red-300">Unable to load escalation policies. <button onClick={() => mutePolicies()} className="underline hover:text-white">Retry</button></div>
+        ) : policiesLoading ? (
+          <div role="status" className="text-xs text-slate-500">Loading escalation policies…</div>
+        ) : <div className="space-y-3">
           {policies.map(p => (
             <div key={p.id} className="bg-[#0d1117] border border-slate-800/60 rounded-xl p-4">
               <div className="flex items-start justify-between gap-3 mb-3">
@@ -333,7 +384,9 @@ export default function RoutingPage() {
               </div>
             </div>
           ))}
+          {policies.length === 0 && <div className="text-xs text-slate-500 py-4">No escalation policies configured.</div>}
         </div>
+        }
       </section>
     </div>
   )

@@ -8,6 +8,8 @@ export interface SessionPayload {
   email: string
   name: string
   role: 'admin' | 'editor' | 'viewer'
+  mustChangePassword: boolean
+  sessionVersion: number
   iat?: number
   exp?: number
 }
@@ -23,7 +25,7 @@ function getSecret(): Uint8Array {
 export function sessionCookieName(): string { return 'vyncicd_session' }
 
 export async function createSession(
-  payload: Pick<SessionPayload, 'id' | 'email' | 'name' | 'role'>
+  payload: Pick<SessionPayload, 'id' | 'email' | 'name' | 'role' | 'mustChangePassword' | 'sessionVersion'>
 ): Promise<string> {
   return new SignJWT({ ...payload })
     .setProtectedHeader({ alg: 'HS256' })
@@ -35,7 +37,18 @@ export async function createSession(
 export async function verifySession(token: string): Promise<SessionPayload | null> {
   try {
     const { payload } = await jwtVerify(token, getSecret())
-    return payload as unknown as SessionPayload
+    if (
+      typeof payload.id !== 'string' || typeof payload.email !== 'string' || typeof payload.name !== 'string'
+      || (payload.role !== 'admin' && payload.role !== 'editor' && payload.role !== 'viewer')
+      || typeof payload.mustChangePassword !== 'boolean'
+      || typeof payload.sessionVersion !== 'number' || !Number.isSafeInteger(payload.sessionVersion)
+      || payload.sessionVersion < 0
+    ) return null
+    return {
+      id: payload.id, email: payload.email, name: payload.name, role: payload.role,
+      mustChangePassword: payload.mustChangePassword, sessionVersion: payload.sessionVersion,
+      iat: payload.iat, exp: payload.exp,
+    }
   } catch {
     return null
   }
@@ -43,19 +56,22 @@ export async function verifySession(token: string): Promise<SessionPayload | nul
 
 export async function getSession(): Promise<SessionPayload | null> {
   const cookieStore = await cookies()
-  const token = cookieStore.get(sessionCookieName())?.value
+  return resolveSession(cookieStore.get(sessionCookieName())?.value)
+}
+
+async function resolveSession(token: string | undefined): Promise<SessionPayload | null> {
   if (!token) return null
   const session = await verifySession(token)
   const user = session ? findUserById(session.id) : null
-  return session && user?.active ? { ...session, email: user.email, name: user.name, role: user.role } : null
+  if (!session || !user?.active || session.sessionVersion !== user.sessionVersion) return null
+  return {
+    ...session, email: user.email, name: user.name, role: user.role,
+    mustChangePassword: user.mustChangePassword,
+  }
 }
 
 export async function getSessionFromRequest(req: NextRequest): Promise<SessionPayload | null> {
-  const token = req.cookies.get(sessionCookieName())?.value
-  if (!token) return null
-  const session = await verifySession(token)
-  const user = session ? findUserById(session.id) : null
-  return session && user?.active ? { ...session, email: user.email, name: user.name, role: user.role } : null
+  return resolveSession(req.cookies.get(sessionCookieName())?.value)
 }
 
 export function hasRole(session: SessionPayload, minimum: 'viewer' | 'editor' | 'admin'): boolean {
@@ -68,6 +84,12 @@ export async function requireRole(
 ): Promise<SessionPayload | NextResponse> {
   const session = await getSessionFromRequest(req)
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (session.mustChangePassword) {
+    return NextResponse.json(
+      { error: 'Change your initial password before continuing.', code: 'PASSWORD_CHANGE_REQUIRED' },
+      { status: 403 }
+    )
+  }
   if (!hasRole(session, minimum)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   return session
 }

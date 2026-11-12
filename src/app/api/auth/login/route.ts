@@ -15,8 +15,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid credentials.' }, { status: 401 })
   }
   if (!user.active) return NextResponse.json({ error: 'This account has been deactivated.' }, { status: 403 })
-  const token = await createSession({ id: user.id, email: user.email, name: user.name, role: user.role })
-  const res = NextResponse.json({ ok: true })
+  const token = await createSession({
+    id: user.id, email: user.email, name: user.name, role: user.role,
+    mustChangePassword: user.mustChangePassword, sessionVersion: user.sessionVersion,
+  })
+  const res = NextResponse.json({ ok: true, mustChangePassword: user.mustChangePassword })
   res.cookies.set(sessionCookieName(), token, { httpOnly: true, sameSite: 'lax', path: '/', maxAge: 7 * 86400 })
   return res
 }

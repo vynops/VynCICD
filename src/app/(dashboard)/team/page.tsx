@@ -5,8 +5,8 @@ import useSWR from 'swr'
 import { Users, Plus, Trash2, X, Loader2, Shield, Eye, EyeOff, Power } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { User } from '@/lib/user-store'
+import { fetchJson, fetchList } from '@/lib/fetch-json'
 
-const fetcher = (url: string) => fetch(url).then(r => r.json())
 
 const ROLE_BADGE: Record<string, string> = {
   admin:  'bg-red-500/15 text-red-400 border-red-500/30',
@@ -32,24 +32,30 @@ function UserModal({ user, onClose, onSave }: { user?: User; onClose: () => void
     if (!name.trim() || !email.trim()) { setError('Name and email are required.'); return }
     if (!user && !password) { setError('Password is required for new users.'); return }
     setSaving(true)
+    setError('')
     const body: Record<string, unknown> = { name, email, role }
     if (password) body.password = password
-    const res = user
-      ? await fetch(`/api/users/${user.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-      : await fetch('/api/users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-    setSaving(false)
-    if (res.ok) { onSave(); onClose() }
-    else { const d = await res.json() as { error?: string }; setError(d.error ?? 'Failed') }
+    try {
+      await fetchJson(user ? `/api/users/${encodeURIComponent(user.id)}` : '/api/users', {
+        method: user ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      })
+      onSave()
+      onClose()
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : 'Unable to save user.')
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => !saving && onClose()}>
       <div className="bg-[#111827] border border-slate-700 rounded-2xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-5">
           <h2 className="text-sm font-bold text-white">{user ? 'Edit User' : 'Add User'}</h2>
-          <button onClick={onClose}><X size={15} className="text-slate-500 hover:text-white" /></button>
+          <button onClick={onClose} disabled={saving} aria-label="Close user form"><X size={15} className="text-slate-500 hover:text-white" /></button>
         </div>
-        {error && <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-400">{error}</div>}
+        {error && <div role="alert" className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-400">{error}</div>}
         <div className="space-y-4">
           <div>
             <label className="text-[11px] text-slate-400 block mb-1.5">Full Name</label>
@@ -87,7 +93,7 @@ function UserModal({ user, onClose, onSave }: { user?: User; onClose: () => void
           </div>
         </div>
         <div className="flex gap-3 mt-6">
-          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-slate-700 text-slate-400 text-sm hover:border-slate-600 transition-colors">Cancel</button>
+          <button onClick={onClose} disabled={saving} className="flex-1 py-2.5 rounded-xl border border-slate-700 text-slate-400 text-sm hover:border-slate-600 transition-colors">Cancel</button>
           <button onClick={submit} disabled={saving}
             className="flex-1 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-white font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-50 transition-colors">
             {saving ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Saving…</> : user ? 'Update' : 'Add User'}
@@ -99,33 +105,56 @@ function UserModal({ user, onClose, onSave }: { user?: User; onClose: () => void
 }
 
 export default function TeamPage() {
-  const { data: users = [], mutate } = useSWR<User[]>('/api/users', fetcher)
-  const { data: me } = useSWR<{ id: string; role: string }>('/api/auth/me', fetcher)
+  const { data: users = [], error, isLoading, mutate } = useSWR<User[]>('/api/users', fetchList)
+  const { data: me } = useSWR<{ id: string; role: string }>('/api/auth/me', fetchJson)
   const [editUser, setEditUser] = useState<User | null>(null)
   const [showNew, setShowNew]   = useState(false)
+  const [actionError, setActionError] = useState('')
+  const [busyId, setBusyId] = useState<string | null>(null)
+
+  function refreshUsers() {
+    mutate().catch(() => setActionError('The change succeeded, but the user list could not be refreshed. Reload to retry.'))
+  }
 
   async function deleteUser(id: string) {
     if (id === me?.id) { alert('You cannot delete your own account.'); return }
     if (!confirm('Delete this user?')) return
-    await fetch(`/api/users/${id}`, { method: 'DELETE' })
-    mutate()
+    setActionError('')
+    setBusyId(id)
+    try {
+      await fetchJson(`/api/users/${encodeURIComponent(id)}`, { method: 'DELETE' })
+      refreshUsers()
+    } catch (failure) {
+      setActionError(failure instanceof Error ? failure.message : 'Unable to delete user.')
+    } finally {
+      setBusyId(null)
+    }
   }
 
   async function toggleUserActive(user: User) {
     if (user.id === me?.id) return
     const action = user.active ? 'deactivate' : 'activate'
     if (!confirm(`${action.charAt(0).toUpperCase()}${action.slice(1)} ${user.name}'s account?`)) return
-    const res = await fetch(`/api/users/${user.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ active: !user.active }) })
-    if (!res.ok) { const data = await res.json() as { error?: string }; alert(data.error ?? `Unable to ${action} account.`) }
-    mutate()
+    setActionError('')
+    setBusyId(user.id)
+    try {
+      await fetchJson(`/api/users/${encodeURIComponent(user.id)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ active: !user.active }) })
+      refreshUsers()
+    } catch (failure) {
+      setActionError(failure instanceof Error ? failure.message : `Unable to ${action} account.`)
+    } finally {
+      setBusyId(null)
+    }
   }
 
   const isAdmin = me?.role === 'admin'
 
   return (
     <div className="space-y-4 max-w-screen-lg">
+      {error && <p role="alert" className="text-sm text-red-400">Unable to load users. <button onClick={() => mutate()} className="underline">Retry</button></p>}
+      {actionError && <p role="alert" className="text-sm text-red-400">{actionError}</p>}
       {(showNew || editUser) && (
-        <UserModal user={editUser ?? undefined} onClose={() => { setShowNew(false); setEditUser(null) }} onSave={() => mutate()} />
+        <UserModal user={editUser ?? undefined} onClose={() => { setShowNew(false); setEditUser(null) }} onSave={refreshUsers} />
       )}
 
       {isAdmin && (
@@ -176,11 +205,11 @@ export default function TeamPage() {
                 {isAdmin && (
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2 justify-end">
-                      <button onClick={() => setEditUser(u)} className="text-[10px] text-slate-500 hover:text-white border border-slate-700 px-2 py-1 rounded-lg transition-colors">Edit</button>
-                      <button onClick={() => toggleUserActive(u)} title={u.active ? 'Deactivate account' : 'Activate account'} aria-label={u.active ? 'Deactivate account' : 'Activate account'} className={cn('transition-colors disabled:opacity-30', u.active ? 'text-emerald-400 hover:text-emerald-300' : 'text-slate-500 hover:text-white')} disabled={u.id === me?.id}>
+                      <button onClick={() => setEditUser(u)} disabled={busyId !== null} className="text-[10px] text-slate-500 hover:text-white border border-slate-700 px-2 py-1 rounded-lg transition-colors">Edit</button>
+                      <button onClick={() => toggleUserActive(u)} title={u.active ? 'Deactivate account' : 'Activate account'} aria-label={u.active ? 'Deactivate account' : 'Activate account'} className={cn('transition-colors disabled:opacity-30', u.active ? 'text-emerald-400 hover:text-emerald-300' : 'text-slate-500 hover:text-white')} disabled={u.id === me?.id || busyId !== null}>
                         <Power className="w-3.5 h-3.5" />
                       </button>
-                      <button onClick={() => deleteUser(u.id)} className="text-red-400 hover:text-red-300 transition-colors disabled:opacity-30" disabled={u.id === me?.id}>
+                      <button onClick={() => deleteUser(u.id)} aria-label={`Delete ${u.name}`} className="text-red-400 hover:text-red-300 transition-colors disabled:opacity-30" disabled={u.id === me?.id || busyId !== null}>
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
@@ -188,6 +217,7 @@ export default function TeamPage() {
                 )}
               </tr>
             ))}
+            {!error && users.length === 0 && <tr><td colSpan={6} className="px-4 py-8 text-slate-500 text-center">{isLoading ? 'Loading users...' : 'No users found.'}</td></tr>}
           </tbody>
         </table>
       </div>

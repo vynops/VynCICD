@@ -4,9 +4,8 @@ import useSWR from 'swr'
 import { useState } from 'react'
 import { Layers, Lock, Plus, Trash2, X, Loader2, ExternalLink } from 'lucide-react'
 import { timeAgo, cn } from '@/lib/utils'
+import { fetchList } from '@/lib/fetch-json'
 import type { Environment, EnvType } from '@/lib/data-store'
-
-const fetcher = (url: string) => fetch(url).then(r => r.json())
 
 const TYPE_COLOR: Record<EnvType, string> = {
   production:  'text-red-400 bg-red-500/10 border-red-500/20',
@@ -24,6 +23,7 @@ function EnvModal({ env, onClose, onSave }: { env?: Environment; onClose: () => 
   const [requiresApproval, setRequiresApproval] = useState(env?.requiresApproval ?? false)
   const [approvers, setApprovers] = useState(env?.approvers?.join(', ') ?? '')
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
 
   async function submit() {
     setSaving(true)
@@ -33,14 +33,25 @@ function EnvModal({ env, onClose, onSave }: { env?: Environment; onClose: () => 
       requiresApproval, approvers: approvers.split(',').map(s => s.trim()).filter(Boolean),
       protected: type === 'production' || type === 'staging',
     }
-    if (env) {
-      await fetch(`/api/environments/${env.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-    } else {
-      await fetch('/api/environments', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+    setError('')
+    try {
+      const response = await fetch(env ? `/api/environments/${env.id}` : '/api/environments', {
+        method: env ? 'PATCH' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({})) as { error?: string }
+        setError(data.error ?? `Could not save environment (${response.status}).`)
+        return
+      }
+      onSave()
+      onClose()
+    } catch {
+      setError('Network error while saving environment.')
+    } finally {
+      setSaving(false)
     }
-    setSaving(false)
-    onSave()
-    onClose()
   }
 
   return (
@@ -51,6 +62,7 @@ function EnvModal({ env, onClose, onSave }: { env?: Environment; onClose: () => 
           <button onClick={onClose}><X size={15} className="text-slate-500 hover:text-white" /></button>
         </div>
         <div className="space-y-4">
+          {error && <div role="alert" className="rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-xs text-red-400">{error}</div>}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="text-[11px] text-slate-400 block mb-1.5">Name</label>
@@ -100,14 +112,21 @@ function EnvModal({ env, onClose, onSave }: { env?: Environment; onClose: () => 
 }
 
 export default function EnvironmentsPage() {
-  const { data: envs = [], mutate } = useSWR<Environment[]>('/api/environments', fetcher)
+  const { data: envs, error: envsError, mutate } = useSWR<Environment[]>('/api/environments', fetchList)
   const [editEnv, setEditEnv] = useState<Environment | null>(null)
   const [showNew, setShowNew] = useState(false)
+  const [actionError, setActionError] = useState('')
 
   async function deleteEnv(id: string, name: string) {
     if (!confirm(`Delete environment "${name}"?`)) return
-    await fetch(`/api/environments/${id}`, { method: 'DELETE' })
-    mutate()
+    setActionError('')
+    try {
+      const response = await fetch(`/api/environments/${id}`, { method: 'DELETE' })
+      if (!response.ok) throw new Error(`Request failed (${response.status})`)
+      await mutate().catch(() => undefined)
+    } catch {
+      setActionError('Environment could not be deleted. Refresh and try again.')
+    }
   }
 
   return (
@@ -115,6 +134,8 @@ export default function EnvironmentsPage() {
       {(showNew || editEnv) && (
         <EnvModal env={editEnv ?? undefined} onClose={() => { setShowNew(false); setEditEnv(null) }} onSave={() => mutate()} />
       )}
+      {envsError && <div role="alert" className="rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-xs text-red-400">Environments could not be loaded. Refresh to try again.</div>}
+      {actionError && <div role="alert" className="rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-xs text-red-400">{actionError}</div>}
 
       <div className="flex justify-end">
         <button onClick={() => setShowNew(true)}
@@ -124,7 +145,7 @@ export default function EnvironmentsPage() {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {envs.map(env => (
+        {(envs ?? []).map(env => (
           <div key={env.id} className="bg-[#0d1117] border border-slate-800/60 rounded-xl p-4 hover:border-slate-700/60 transition-colors">
             <div className="flex items-start justify-between mb-3">
               <div className="flex items-center gap-2">
@@ -155,15 +176,19 @@ export default function EnvironmentsPage() {
               {env.approvers.length > 0 && (
                 <div className="text-slate-500">Approvers: <span className="text-white">{env.approvers.join(', ')}</span></div>
               )}
+              <a href={`/deployments?environment=${encodeURIComponent(env.name)}`} className="inline-flex text-emerald-400 hover:text-emerald-300 underline">
+                View deployments
+              </a>
               <div className="text-slate-600">Created {timeAgo(env.createdAt)}</div>
             </div>
           </div>
         ))}
-        {envs.length === 0 && (
+        {envs && envs.length === 0 && !envsError && (
           <div className="col-span-full bg-[#0d1117] border border-dashed border-slate-800 rounded-xl p-10 text-center text-sm text-slate-600">
             No environments configured.
           </div>
         )}
+        {!envs && !envsError && <div className="col-span-full text-center text-sm text-slate-600">Loading environments…</div>}
       </div>
     </div>
   )

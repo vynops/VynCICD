@@ -9,6 +9,12 @@ interface DayUsage {
 }
 type UsageStore = Record<string, DayUsage>
 
+export interface CopilotUsageSummary {
+  today: DayUsage
+  last7Days: Array<{ date: string } & DayUsage>
+  total: DayUsage
+}
+
 const DATA_DIR = path.join(process.cwd(), 'data')
 const FILE = path.join(DATA_DIR, 'copilot-usage.json')
 

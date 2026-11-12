@@ -5,5 +5,6 @@ import DashboardLayout from '@/components/layout/DashboardLayout'
 export default async function Layout({ children }: { children: React.ReactNode }) {
   const session = await getSession()
   if (!session) redirect('/login')
+  if (session.mustChangePassword) redirect('/change-password')
   return <DashboardLayout>{children}</DashboardLayout>
 }

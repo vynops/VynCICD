@@ -4,10 +4,10 @@ import useSWR from 'swr'
 import { useState, useEffect } from 'react'
 import { BookOpen, Plus, Trash2, X, Loader2, Webhook, CheckCircle2, XCircle, Eye, EyeOff, Save, Pencil } from 'lucide-react'
 import { timeAgo, cn } from '@/lib/utils'
+import { fetchJson, fetchList } from '@/lib/fetch-json'
+import { CONFIGURED_MASK } from '@/lib/settings-fields'
 import type { Repository } from '@/lib/data-store'
 import type { AppSettings } from '@/lib/settings-store'
-
-const fetcher = (url: string) => fetch(url).then(r => r.json())
 
 const PROVIDER_COLOR: Record<string, string> = {
   gitea:     'text-emerald-300 bg-emerald-900/30',
@@ -22,6 +22,10 @@ const STATUS_COLOR: Record<string, string> = {
 }
 
 type Provider = 'gitea' | 'github' | 'gitlab' | 'bitbucket'
+
+export function hasConfiguredSecret(value: string) {
+  return value === CONFIGURED_MASK || Boolean(value.trim())
+}
 
 function CredInput({ label, value, onChange, masked = true, placeholder }: {
   label: string; value: string; onChange: (v: string) => void; masked?: boolean; placeholder?: string
@@ -51,7 +55,7 @@ function CredInput({ label, value, onChange, masked = true, placeholder }: {
 }
 
 function AddRepoModal({ onClose, onSave }: { onClose: () => void; onSave: () => void }) {
-  const { data: settings, mutate: mutateSettings } = useSWR<AppSettings>('/api/settings', fetcher)
+  const { data: settings, mutate: mutateSettings } = useSWR<AppSettings>('/api/settings', fetchJson)
   const [owner, setOwner] = useState('')
   const [name, setName] = useState('')
   const [provider, setProvider] = useState<Provider>('gitea')
@@ -96,10 +100,20 @@ function AddRepoModal({ onClose, onSave }: { onClose: () => void; onSave: () => 
       : provider === 'gitlab'
       ? { gitlabUrl: creds.gitlab.url, gitlabToken: creds.gitlab.token, gitlabWebhookSecret: creds.gitlab.webhookSecret }
       : { bitbucketUsername: creds.bitbucket.username, bitbucketAppPassword: creds.bitbucket.appPassword, bitbucketWebhookSecret: creds.bitbucket.webhookSecret }
-    await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) })
-    mutateSettings()
-    setCredsSaved(true)
-    setSavingCreds(false)
+    try {
+      const response = await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) })
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({})) as { error?: string }
+        setError(data.error ?? 'Failed to save provider credentials.')
+        return
+      }
+      setCredsSaved(true)
+      await mutateSettings().catch(() => undefined)
+    } catch {
+      setError('Network error while saving provider credentials.')
+    } finally {
+      setSavingCreds(false)
+    }
   }
 
   const WEBHOOK_PATHS: Record<Provider, string> = {
@@ -131,19 +145,19 @@ function AddRepoModal({ onClose, onSave }: { onClose: () => void; onSave: () => 
     </>,
   }
 
-  const isConfigured = provider === 'gitea'     ? !!(creds.gitea.url && creds.gitea.token)
-    : provider === 'github'    ? !!creds.github.token
-    : provider === 'gitlab'    ? !!creds.gitlab.token
-    : !!(creds.bitbucket.username && creds.bitbucket.appPassword)
+  const isConfigured = provider === 'gitea'     ? !!creds.gitea.url && hasConfiguredSecret(creds.gitea.token)
+    : provider === 'github'    ? hasConfiguredSecret(creds.github.token)
+    : provider === 'gitlab'    ? hasConfiguredSecret(creds.gitlab.token)
+    : !!creds.bitbucket.username && hasConfiguredSecret(creds.bitbucket.appPassword)
 
   async function testConnection() {
     setTestState({ loading: true })
     // Pass current UI creds directly so test works before saving
     const body: Record<string, string> = { provider }
-    if (provider === 'gitea')     { body.url = creds.gitea.url; body.token = creds.gitea.token }
-    if (provider === 'github')    { body.token = creds.github.token }
-    if (provider === 'gitlab')    { body.url = creds.gitlab.url; body.token = creds.gitlab.token }
-    if (provider === 'bitbucket') { body.username = creds.bitbucket.username; body.appPassword = creds.bitbucket.appPassword }
+    if (provider === 'gitea')     { body.url = creds.gitea.url; if (creds.gitea.token !== CONFIGURED_MASK) body.token = creds.gitea.token }
+    if (provider === 'github' && creds.github.token !== CONFIGURED_MASK) body.token = creds.github.token
+    if (provider === 'gitlab')    { body.url = creds.gitlab.url; if (creds.gitlab.token !== CONFIGURED_MASK) body.token = creds.gitlab.token }
+    if (provider === 'bitbucket') { body.username = creds.bitbucket.username; if (creds.bitbucket.appPassword !== CONFIGURED_MASK) body.appPassword = creds.bitbucket.appPassword }
     try {
       const res = await fetch('/api/settings/test-git', {
         method: 'POST',
@@ -151,7 +165,7 @@ function AddRepoModal({ onClose, onSave }: { onClose: () => void; onSave: () => 
         body: JSON.stringify(body),
       })
       const data = await res.json() as { success: boolean; message: string }
-      setTestState({ loading: false, success: data.success, message: data.message })
+      setTestState({ loading: false, success: res.ok && data.success, message: data.message ?? `Request failed (${res.status})` })
     } catch {
       setTestState({ loading: false, success: false, message: 'Network error' })
     }
@@ -160,14 +174,19 @@ function AddRepoModal({ onClose, onSave }: { onClose: () => void; onSave: () => 
   async function submit() {
     if (!owner.trim() || !name.trim()) { setError('Owner and repository name are required.'); return }
     setSaving(true)
-    const res = await fetch('/api/repositories', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ owner: owner.trim(), name: name.trim(), provider }),
-    })
-    setSaving(false)
-    if (res.ok) { onSave(); onClose() }
-    else { const d = await res.json() as { error?: string }; setError(d.error ?? 'Failed') }
+    try {
+      const res = await fetch('/api/repositories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ owner: owner.trim(), name: name.trim(), provider }),
+      })
+      if (res.ok) { onSave(); onClose() }
+      else { const d = await res.json().catch(() => ({})) as { error?: string }; setError(d.error ?? `Failed to add repository (${res.status})`) }
+    } catch {
+      setError('Network error while adding repository.')
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -176,7 +195,7 @@ function AddRepoModal({ onClose, onSave }: { onClose: () => void; onSave: () => 
         <div className="p-6 space-y-5">
           {/* Header */}
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-bold text-white">Connect Repository</h2>
+            <h2 className="text-sm font-bold text-white">Add Repository</h2>
             <button onClick={onClose}><X size={15} className="text-slate-500 hover:text-white" /></button>
           </div>
 
@@ -238,6 +257,7 @@ function AddRepoModal({ onClose, onSave }: { onClose: () => void; onSave: () => 
           </div>
 
           {/* Owner + name */}
+          <p className="text-[10px] text-slate-500">This registers the repository in VynCICD; provider access is not validated here.</p>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-[11px] text-slate-400 font-medium block mb-1.5">Owner / Organisation</label>
@@ -256,7 +276,7 @@ function AddRepoModal({ onClose, onSave }: { onClose: () => void; onSave: () => 
             <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-slate-700 text-slate-400 text-sm hover:border-slate-600 transition-colors">Cancel</button>
             <button onClick={submit} disabled={saving}
               className="flex-1 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-white font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-50 transition-colors">
-              {saving ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Connecting…</> : 'Connect'}
+              {saving ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Adding…</> : 'Add Repository'}
             </button>
           </div>
         </div>
@@ -286,14 +306,19 @@ function EditRepoModal({ repo, onClose, onSave }: { repo: Repository; onClose: (
 
   async function submit() {
     setSaving(true)
-    const res = await fetch(`/api/repositories/${repo.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ description, defaultBranch, cloneUrl: cloneUrl || undefined, language, private: isPrivate, webhookActive }),
-    })
-    setSaving(false)
-    if (res.ok) { onSave(); onClose() }
-    else { const d = await res.json() as { error?: string }; setError(d.error ?? 'Failed') }
+    try {
+      const res = await fetch(`/api/repositories/${repo.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ description, defaultBranch, cloneUrl: cloneUrl || undefined, language, private: isPrivate, webhookActive }),
+      })
+      if (res.ok) { onSave(); onClose() }
+      else { const d = await res.json().catch(() => ({})) as { error?: string }; setError(d.error ?? `Failed to save repository (${res.status})`) }
+    } catch {
+      setError('Network error while saving repository.')
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -365,14 +390,21 @@ function EditRepoModal({ repo, onClose, onSave }: { repo: Repository; onClose: (
 }
 
 export default function RepositoriesPage() {
-  const { data: repos = [], mutate } = useSWR<Repository[]>('/api/repositories', fetcher)
+  const { data: repos, error: reposError, mutate } = useSWR<Repository[]>('/api/repositories', fetchList)
   const [showAdd, setShowAdd] = useState(false)
   const [editRepo, setEditRepo] = useState<Repository | null>(null)
+  const [actionError, setActionError] = useState('')
 
   async function deleteRepo(id: string) {
-    if (!confirm('Remove this repository and all its pipelines?')) return
-    await fetch(`/api/repositories/${id}`, { method: 'DELETE' })
-    mutate()
+    if (!confirm('Remove this repository? Existing pipelines remain configured and may no longer be able to run.')) return
+    setActionError('')
+    try {
+      const response = await fetch(`/api/repositories/${id}`, { method: 'DELETE' })
+      if (!response.ok) throw new Error(`Request failed (${response.status})`)
+      await mutate().catch(() => undefined)
+    } catch {
+      setActionError('Repository could not be removed. Refresh and try again.')
+    }
   }
 
   return (
@@ -380,15 +412,17 @@ export default function RepositoriesPage() {
       {showAdd && <AddRepoModal onClose={() => setShowAdd(false)} onSave={() => mutate()} />}
       {editRepo && <EditRepoModal repo={editRepo} onClose={() => setEditRepo(null)} onSave={() => mutate()} />}
 
+      {reposError && <div role="alert" className="rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-xs text-red-400">Repositories could not be loaded. Refresh to try again.</div>}
+      {actionError && <div role="alert" className="rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-xs text-red-400">{actionError}</div>}
       <div className="flex justify-end">
         <button onClick={() => setShowAdd(true)}
           className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-white text-xs font-bold transition-colors">
-          <Plus className="w-3.5 h-3.5" /> Connect Repository
+          <Plus className="w-3.5 h-3.5" /> Add Repository
         </button>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {repos.map(repo => (
+        {(repos ?? []).map(repo => (
           <div key={repo.id} className="bg-[#0d1117] border border-slate-800/60 rounded-xl p-4 hover:border-slate-700/60 transition-colors">
             <div className="flex items-start justify-between mb-3">
               <div className="flex items-center gap-2 min-w-0">
@@ -399,6 +433,7 @@ export default function RepositoriesPage() {
                 </div>
               </div>
               <div className="flex items-center gap-1 ml-2 flex-shrink-0">
+                <a href={`/pipelines?repoId=${encodeURIComponent(repo.id)}`} className="text-[10px] text-slate-500 hover:text-emerald-400 transition-colors" onClick={e => e.stopPropagation()}>Pipelines</a>
                 <button onClick={() => setEditRepo(repo)} className="text-slate-600 hover:text-emerald-400 transition-colors" title="Edit">
                   <Pencil className="w-3.5 h-3.5" />
                 </button>
@@ -429,11 +464,12 @@ export default function RepositoriesPage() {
             )}
           </div>
         ))}
-        {repos.length === 0 && (
+        {repos && repos.length === 0 && !reposError && (
           <div className="col-span-full bg-[#0d1117] border border-dashed border-slate-800 rounded-xl p-10 text-center text-sm text-slate-600">
-            No repositories connected. Click <strong className="text-slate-400">Connect Repository</strong> to add one.
+            No repositories configured. Click <strong className="text-slate-400">Add Repository</strong> to register one.
           </div>
         )}
+        {!repos && !reposError && <div className="col-span-full text-center text-sm text-slate-600">Loading repositories…</div>}
       </div>
     </div>
   )
