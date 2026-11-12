@@ -1,6 +1,32 @@
+<div align="center">
+
 # VynCICD
 
-**A self-hosted CI/CD control plane for native pipelines, Jenkinsfile execution, Kubernetes delivery, security scanning, notifications, AI triage, and DORA metrics.**
+### AI-Powered CI/CD Pipeline Platform
+
+**Self-hosted · Open Source · Native, Jenkins, and Kubernetes Workflows**
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Node.js](https://img.shields.io/badge/Node.js-20.9%2B-339933?logo=node.js&logoColor=white)](https://nodejs.org)
+[![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=next.js&logoColor=white)](https://nextjs.org)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind-4-38B2AC?logo=tailwind-css&logoColor=white)](https://tailwindcss.com)
+[![Live Demo](https://img.shields.io/badge/Live_Demo-cicd.vynops.online-10b981)](https://cicd.vynops.online)
+[![Part of VynOps](https://img.shields.io/badge/Part_of-VynOps_Suite-6366f1)](https://vynops.com)
+
+*Build. Scan. Deploy. Operate. Your pipelines, your infrastructure.*
+
+[**Live Demo**](https://cicd.vynops.online) · [**Product Page**](https://vynops.com/product/vyncicd) · [**VynOps Suite**](https://vynops.com)
+
+</div>
+
+---
+
+## Overview
+
+VynCICD is a **self-hosted CI/CD control plane** for native pipelines, Jenkinsfile
+execution, Kubernetes delivery, security scanning, notifications, AI triage, and
+DORA metrics.
 
 VynCICD gives teams one place to connect repositories, define or trigger pipelines, inspect runs, track deployments, manage incidents, and compare engineering performance.
 
@@ -16,29 +42,54 @@ VynCICD is the control plane and dashboard. The selected execution engine owns t
 
 ---
 
+## Screenshots
+
+| Screenshot | Screenshot |
+|---|---|
+| [![Login and first-time setup](screenshots/Screenshot%202026-09-01%20133059.png)](screenshots/Screenshot%202026-09-01%20133059.png)<br>Login and first-time admin setup. | [![Overview dashboard](screenshots/Screenshot%202026-09-01%20133243.png)](screenshots/Screenshot%202026-09-01%20133243.png)<br>Overview dashboard with run health, DORA metrics, recent deployments, and incident load. |
+| [![Pipeline catalog](screenshots/Screenshot%202026-09-01%20133312.png)](screenshots/Screenshot%202026-09-01%20133312.png)<br>Pipeline catalog showing pending, idle, successful, and failed pipeline definitions with trigger controls. | [![Jenkins pipeline creation](screenshots/Screenshot%202026-09-01%20133940.png)](screenshots/Screenshot%202026-09-01%20133940.png)<br>New pipeline flow for Jenkinsfile execution through Jenkins. |
+| [![Argo CD pipeline creation](screenshots/Screenshot%202026-09-01%20134002.png)](screenshots/Screenshot%202026-09-01%20134002.png)<br>New pipeline flow for Argo CD GitOps deployment. | [![Pipeline runs](screenshots/Screenshot%202026-09-01%20134159.png)](screenshots/Screenshot%202026-09-01%20134159.png)<br>Run history with success, failed, pending, filter, search, and export states. |
+| [![Argo CD run detail](screenshots/Screenshot%202026-09-01%20134242.png)](screenshots/Screenshot%202026-09-01%20134242.png)<br>Expanded Argo CD run detail with manual trigger metadata, sync state, health state, and external Argo CD link. | [![Jenkins run detail](screenshots/Screenshot%202026-09-01%20134313.png)](screenshots/Screenshot%202026-09-01%20134313.png)<br>Expanded Jenkins run detail with build duration and Jenkins build artifact link. |
+| [![Repositories](screenshots/Screenshot%202026-09-01%20134334.png)](screenshots/Screenshot%202026-09-01%20134334.png)<br>Repository cards with provider metadata and webhook-active status. | [![Environments](screenshots/Screenshot%202026-09-01%20134402.png)](screenshots/Screenshot%202026-09-01%20134402.png)<br>Deployment environment targets for development, production, and lab clusters. |
+| [![Deployments](screenshots/Screenshot%202026-09-01%20134441.png)](screenshots/Screenshot%202026-09-01%20134441.png)<br>Deployment ledger with staging releases, versions, passed health gates, and rollback actions. | [![Security scans](screenshots/Screenshot%202026-09-01%20134621.png)](screenshots/Screenshot%202026-09-01%20134621.png)<br>Security and compliance scan artifacts with CVE counts, secret detection, build-block counters, and passed scan results. |
+| [![Analytics and DORA](screenshots/Screenshot%202026-09-01%20134646.png)](screenshots/Screenshot%202026-09-01%20134646.png)<br>DORA analytics with deployment frequency, lead time, MTTR, change failure rate, build activity, and failing-pipeline trends. | [![Incidents](screenshots/Screenshot%202026-09-01%20134715.png)](screenshots/Screenshot%202026-09-01%20134715.png)<br>Incident queue with severity, acknowledgement breach timers, assignment, acknowledgement, and resolution actions. |
+| [![On-call](screenshots/Screenshot%202026-09-01%20134754.png)](screenshots/Screenshot%202026-09-01%20134754.png)<br>On-call schedule history and shift management. | [![Routing and escalations](screenshots/Screenshot%202026-09-01%20134814.png)](screenshots/Screenshot%202026-09-01%20134814.png)<br>Routing rules and escalation policies for alert delivery to Slack and on-call responders. |
+| [![AI Copilot](screenshots/Screenshot%202026-09-01%20134834.png)](screenshots/Screenshot%202026-09-01%20134834.png)<br>AI Copilot workspace with usage counters, prompt shortcuts, and pipeline triage prompts. | [![Settings and integrations](screenshots/Screenshot%202026-09-01%20134859.png)](screenshots/Screenshot%202026-09-01%20134859.png)<br>Settings for Kubernetes, registry, credentials, notifications, AI, DORA targets, and token usage. |
+| [![Team and roles](screenshots/Screenshot%202026-09-01%20134915.png)](screenshots/Screenshot%202026-09-01%20134915.png)<br>Team management with admin/viewer roles and role reference. | [![Native pipeline stages](screenshots/Screenshot%202026-09-01%20154833.png)](screenshots/Screenshot%202026-09-01%20154833.png)<br>Native VynCICD stage editor with lint, test, build, and scan steps. |
+| [![Execution mode selector](screenshots/Screenshot%202026-09-01%20154954.png)](screenshots/Screenshot%202026-09-01%20154954.png)<br>Execution-mode selector for native stages, Jenkinsfile via Jenkins, and Argo CD GitOps deployment. |  |
+
+---
+
 ## Contents
 
-1. [Understand The System](#understand-the-system)
-2. [Accounts And Permissions](#accounts-and-permissions)
-3. [Architecture](#architecture)
-4. [Server Reference](#server-reference)
-5. [Install Locally](#install-locally)
-6. [Configure Environment](#configure-environment)
-7. [Run VynCICD](#run-vyncicd)
-8. [Production Deployment](#production-deployment)
-9. [Back Up And Restore](#back-up-and-restore)
-10. [Connect A Repository](#connect-a-repository)
-11. [Native Pipelines](#native-pipelines)
-12. [Jenkins CI](#jenkins-ci)
-13. [Jenkins Kubernetes CD](#jenkins-kubernetes-cd)
-14. [Kubernetes And k3d](#kubernetes-and-k3d)
-15. [Container Registry](#container-registry)
-16. [Resource Limits](#resource-limits)
-17. [Settings Guide](#settings-guide)
-18. [Security And Secrets](#security-and-secrets)
-19. [Troubleshooting](#troubleshooting)
-20. [Checklists](#checklists)
-21. [Repository Reference](#repository-reference)
+1. [Overview](#overview)
+2. [Screenshots](#screenshots)
+3. [Understand The System](#understand-the-system)
+4. [Accounts And Permissions](#accounts-and-permissions)
+5. [Architecture](#architecture)
+6. [Server Reference](#server-reference)
+7. [Install Locally](#install-locally)
+8. [Configure Environment](#configure-environment)
+9. [Run VynCICD](#run-vyncicd)
+10. [Production Deployment](#production-deployment)
+11. [Back Up And Restore](#back-up-and-restore)
+12. [Connect A Repository](#connect-a-repository)
+13. [Native Pipelines](#native-pipelines)
+14. [Jenkins CI](#jenkins-ci)
+15. [Jenkins Kubernetes CD](#jenkins-kubernetes-cd)
+16. [Argo CD GitOps Lab Setup](#argo-cd-gitops-lab-setup)
+17. [Kubernetes And k3d](#kubernetes-and-k3d)
+18. [Container Registry](#container-registry)
+19. [Resource Limits](#resource-limits)
+20. [Dashboard Workflows](#dashboard-workflows)
+21. [Settings Guide](#settings-guide)
+22. [Security And Secrets](#security-and-secrets)
+23. [Troubleshooting](#troubleshooting)
+24. [Checklists](#checklists)
+25. [Repository Reference](#repository-reference)
+26. [Final Mental Model](#final-mental-model)
+27. [Part of the VynOps Suite](#part-of-the-vynops-suite)
+28. [License](#license)
 
 ---
 
@@ -1417,11 +1468,12 @@ Kubernetes ResourceQuota limits aggregate namespace usage. LimitRange supplies d
 ## Settings Guide
 
 Open **Settings**. Save settings before testing saved values.
-Unsaved edits disable connection/notification tests so that tests cannot accidentally
-validate an older configuration. Failed saves remain visibly failed and preserve
-the draft; non-admin users have read-only controls. Configured credentials remain
-masked in settings responses and are retained when their placeholders are unchanged.
-Numeric settings enforce the same limits as the controls.
+Unsaved edits disable non-AI connection/notification tests so that these tests
+cannot accidentally validate an older configuration. AI connection tests use the
+current draft and can run before saving. Failed saves remain visibly failed and
+preserve the draft; non-admin users have read-only controls. Configured credentials
+remain masked in settings responses and are retained when their placeholders are
+unchanged. Numeric settings enforce the same limits as the controls.
 
 ### Kubernetes and registry
 
@@ -1467,9 +1519,28 @@ Channels can be independently enabled or disabled:
 
 ### AI Copilot
 
-Supported provider modes include Groq, OpenAI, Anthropic, Google, and custom OpenAI-compatible endpoints. Keys are masked as `***configured***`.
-The Model field accepts a manually entered model ID for any provider, so retired models can be replaced without a code update. **Test AI provider** tests the entered settings before saving; **Save Changes** remains available without a successful test. A running test shows **Testing...** followed by its result. Editing settings clears previous results and discards results from tests started before the edit. Other integration tests require saved settings and show a reminder while changes are unsaved.
-For Groq, connection retests and Copilot prefer the API key saved through AI Copilot settings. The legacy Groq key is a fallback only. Browser password-manager prompts are separate from the application save; dismissing them does not discard the saved API key.
+Supported providers include Groq, OpenAI, Anthropic, Google, and custom
+OpenAI-compatible endpoints.
+
+**Models and credentials:**
+
+- **Model** accepts a manually entered model ID for any provider. Replace retired
+  models without a code update.
+- API keys are masked as `***configured***`.
+- Groq connection retests and Copilot prefer the key saved through AI Copilot
+  settings. The legacy Groq key is a fallback only.
+- Browser password-manager prompts are separate from application saves.
+  Dismissing a prompt does not discard the saved API key.
+
+**Test and save:**
+
+- **Test AI provider** tests the entered settings before saving.
+- **Save Changes** remains available without a successful test.
+- A running test shows **Testing...**, followed by its result.
+- Editing settings clears previous results and discards results from tests
+  started before the edit.
+- Other integration tests require saved settings and show a reminder while
+  changes are unsaved.
 
 ### DORA Targets
 
@@ -1699,24 +1770,6 @@ The production build is the authoritative compile/type validation. The existing 
 
 ---
 
-## Screenshots
-
-| Screenshot | Screenshot |
-|---|---|
-| [![Login and first-time setup](screenshots/Screenshot%202026-09-01%20133059.png)](screenshots/Screenshot%202026-09-01%20133059.png)<br>Login and first-time admin setup. | [![Overview dashboard](screenshots/Screenshot%202026-09-01%20133243.png)](screenshots/Screenshot%202026-09-01%20133243.png)<br>Overview dashboard with run health, DORA metrics, recent deployments, and incident load. |
-| [![Pipeline catalog](screenshots/Screenshot%202026-09-01%20133312.png)](screenshots/Screenshot%202026-09-01%20133312.png)<br>Pipeline catalog showing pending, idle, successful, and failed pipeline definitions with trigger controls. | [![Jenkins pipeline creation](screenshots/Screenshot%202026-09-01%20133940.png)](screenshots/Screenshot%202026-09-01%20133940.png)<br>New pipeline flow for Jenkinsfile execution through Jenkins. |
-| [![Argo CD pipeline creation](screenshots/Screenshot%202026-09-01%20134002.png)](screenshots/Screenshot%202026-09-01%20134002.png)<br>New pipeline flow for Argo CD GitOps deployment. | [![Pipeline runs](screenshots/Screenshot%202026-09-01%20134159.png)](screenshots/Screenshot%202026-09-01%20134159.png)<br>Run history with success, failed, pending, filter, search, and export states. |
-| [![Argo CD run detail](screenshots/Screenshot%202026-09-01%20134242.png)](screenshots/Screenshot%202026-09-01%20134242.png)<br>Expanded Argo CD run detail with manual trigger metadata, sync state, health state, and external Argo CD link. | [![Jenkins run detail](screenshots/Screenshot%202026-09-01%20134313.png)](screenshots/Screenshot%202026-09-01%20134313.png)<br>Expanded Jenkins run detail with build duration and Jenkins build artifact link. |
-| [![Repositories](screenshots/Screenshot%202026-09-01%20134334.png)](screenshots/Screenshot%202026-09-01%20134334.png)<br>Repository cards with provider metadata and webhook-active status. | [![Environments](screenshots/Screenshot%202026-09-01%20134402.png)](screenshots/Screenshot%202026-09-01%20134402.png)<br>Deployment environment targets for development, production, and lab clusters. |
-| [![Deployments](screenshots/Screenshot%202026-09-01%20134441.png)](screenshots/Screenshot%202026-09-01%20134441.png)<br>Deployment ledger with staging releases, versions, passed health gates, and rollback actions. | [![Security scans](screenshots/Screenshot%202026-09-01%20134621.png)](screenshots/Screenshot%202026-09-01%20134621.png)<br>Security and compliance scan artifacts with CVE counts, secret detection, build-block counters, and passed scan results. |
-| [![Analytics and DORA](screenshots/Screenshot%202026-09-01%20134646.png)](screenshots/Screenshot%202026-09-01%20134646.png)<br>DORA analytics with deployment frequency, lead time, MTTR, change failure rate, build activity, and failing-pipeline trends. | [![Incidents](screenshots/Screenshot%202026-09-01%20134715.png)](screenshots/Screenshot%202026-09-01%20134715.png)<br>Incident queue with severity, acknowledgement breach timers, assignment, acknowledgement, and resolution actions. |
-| [![On-call](screenshots/Screenshot%202026-09-01%20134754.png)](screenshots/Screenshot%202026-09-01%20134754.png)<br>On-call schedule history and shift management. | [![Routing and escalations](screenshots/Screenshot%202026-09-01%20134814.png)](screenshots/Screenshot%202026-09-01%20134814.png)<br>Routing rules and escalation policies for alert delivery to Slack and on-call responders. |
-| [![AI Copilot](screenshots/Screenshot%202026-09-01%20134834.png)](screenshots/Screenshot%202026-09-01%20134834.png)<br>AI Copilot workspace with usage counters, prompt shortcuts, and pipeline triage prompts. | [![Settings and integrations](screenshots/Screenshot%202026-09-01%20134859.png)](screenshots/Screenshot%202026-09-01%20134859.png)<br>Settings for Kubernetes, registry, credentials, notifications, AI, DORA targets, and token usage. |
-| [![Team and roles](screenshots/Screenshot%202026-09-01%20134915.png)](screenshots/Screenshot%202026-09-01%20134915.png)<br>Team management with admin/viewer roles and role reference. | [![Native pipeline stages](screenshots/Screenshot%202026-09-01%20154833.png)](screenshots/Screenshot%202026-09-01%20154833.png)<br>Native VynCICD stage editor with lint, test, build, and scan steps. |
-| [![Execution mode selector](screenshots/Screenshot%202026-09-01%20154954.png)](screenshots/Screenshot%202026-09-01%20154954.png)<br>Execution-mode selector for native stages, Jenkinsfile via Jenkins, and Argo CD GitOps deployment. |  |
-
----
-
 ## Final Mental Model
 
 ```text
@@ -1742,3 +1795,26 @@ Operating principles:
 6. Never expose secrets in source, logs, screenshots, or chat.
 7. Build before restart and verify the live result after every change.
 8. Test CD in a dedicated namespace before considering production.
+
+---
+
+## Part of the VynOps Suite
+
+| Product | Purpose | Repo |
+|---|---|---|
+| **VynOps** | Kubernetes operations platform | [vynops/VynOps](https://github.com/vynops/VynOps) |
+| **VynAI** | Ollama fleet manager and AI gateway | [vynops/VynAI](https://github.com/vynops/VynAI) |
+| **VynCost** | Cloud cost visibility | [vynops/VynCost](https://github.com/vynops/VynCost) |
+| **VynDB** | Database operations | [vynops/VynDB](https://github.com/vynops/VynDB) |
+| **VynDC** | Data center management | [vynops/VynDC](https://github.com/vynops/VynDC) |
+| **VynCICD** | CI/CD pipeline management | [vynops/VynCICD](https://github.com/vynops/VynCICD) |
+| **VynHana** | SAP HANA Database management | [vynops/VynHana](https://github.com/vynops/VynHana) |
+| **VynSAP** | SAP ERP management | [vynops/VynSAP](https://github.com/vynops/VynSAP) |
+
+---
+
+## License
+
+MIT — see [LICENSE](LICENSE)
+
+---
