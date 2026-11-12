@@ -557,6 +557,10 @@ Connected to Jenkins · <version>
 
 The token should show as `***configured***`.
 
+When Jenkins and VynCICD run on the same host, use the loopback URL above.
+Connection tests run on the server; routing back through its public address can
+time out even when Jenkins is healthy locally.
+
 ### Create a Jenkinsfile pipeline
 
 1. Open **Pipelines -> New Pipeline**.
@@ -936,26 +940,59 @@ databases, the registry, Gitea, and both k3d clusters.
 
 ### Access Argo CD in this lab
 
-Argo CD is intentionally a private `ClusterIP` service. The server-side
-port-forward is not public and must be running for VynCICD to reach Argo CD:
+Keep the original `argocd-server` service as `ClusterIP`. For VynCICD running
+outside Kubernetes on the same host, create a dedicated NodePort and publish it
+through the existing k3d load balancer **only on host loopback**.
+
+Use the account that owns the cluster context. If it belongs to root, prepend
+`sudo` to the `kubectl`, `k3d`, and `docker` commands below.
 
 ```bash
-nohup kubectl --context k3d-cicd \
-  -n argocd \
-  port-forward \
-  --address 127.0.0.1 \
-  svc/argocd-server \
-  8081:443 \
-  > /tmp/argocd-port-forward.log 2>&1 &
+kubectl --context k3d-cicd apply -f - <<'YAML'
+apiVersion: v1
+kind: Service
+metadata:
+  name: argocd-server-private
+  namespace: argocd
+spec:
+  type: NodePort
+  selector:
+    app.kubernetes.io/name: argocd-server
+  ports:
+    - name: https
+      port: 443
+      targetPort: 8080
+      nodePort: 30443
+      protocol: TCP
+YAML
+
+k3d cluster edit cicd \
+  --port-add '127.0.0.1:8081:30443@loadbalancer'
 ```
 
-This must be started again after a server reboot. Verify it:
+Match the selector and target port to the original Argo CD service if your
+installation differs. Ensure NodePort `30443` is unused before creating the
+service. Add the load-balancer mapping only once; inspect existing bindings
+before repeating the command.
+
+This replaces the temporary `kubectl port-forward` process. The service and
+Docker port mapping persist across normal restarts; the load balancer must have
+an `always` or `unless-stopped` restart policy. Recreating the cluster requires
+reapplying this configuration.
+
+Verify the service, loopback-only mapping, restart policy, and endpoint:
 
 ```bash
-pgrep -af "kubectl.*port-forward.*argocd-server"
-curl -skI https://127.0.0.1:8081
+kubectl --context k3d-cicd -n argocd \
+  get service argocd-server argocd-server-private
+docker inspect --format '{{json .HostConfig.PortBindings}}' k3d-cicd-serverlb
+docker inspect --format '{{.HostConfig.RestartPolicy.Name}}' k3d-cicd-serverlb
 curl -sk https://127.0.0.1:8081/api/version
 ```
+
+The `30443/tcp` binding must use `HostIp` `127.0.0.1` and `HostPort` `8081`.
+Do not bind this Argo CD endpoint to `0.0.0.0` or publish it publicly.
+Continue using the Argo API token; this mapping does not replace authentication.
 
 Expected Argo version response:
 
@@ -963,11 +1000,8 @@ Expected Argo version response:
 {"Version":"v3.5.1"}
 ```
 
-Occasional `broken pipe` messages in the port-forward log usually mean a
-browser or API client closed a connection. They are harmless if the process is
-still running and the `curl` checks succeed.
-
-For browser access from Windows, tunnel the server port-forward over SSH:
+For optional browser access from Windows, tunnel the private endpoint over SSH.
+VynCICD's server-side integration does not need this SSH tunnel:
 
 ```powershell
 ssh -i "<SSH_KEY_PATH>" `
@@ -991,7 +1025,7 @@ sudo mv /tmp/argocd /usr/local/bin/argocd
 argocd version --client
 ```
 
-Log in through the server-side port-forward:
+Log in through the private endpoint:
 
 ```bash
 argocd login 127.0.0.1:8081 \
@@ -1111,7 +1145,7 @@ apps/jenkins-cd-test/deployment.yaml
 
 ### Test VynCICD Argo CD execution
 
-1. Ensure the server port-forward is running.
+1. Verify the private endpoint responds at `https://127.0.0.1:8081/api/version`.
 2. Confirm **Test connection** reports `Connected to Argo CD`.
 3. Open **Pipelines -> New Pipeline**.
 4. Select **Argo CD GitOps deployment**.
@@ -1153,14 +1187,14 @@ argocd-nginx-test   1/1   Running
 | Symptom | Cause | Fix |
 |---|---|---|
 | VynCICD test returns 404 | Wrong version endpoint or missing route | Use `/api/version`; confirm `/api/settings/test-argocd` is in the build |
-| VynCICD test says Network error | Port-forward stopped or TLS rejected | Start `nohup` port-forward; use the self-signed-safe client; test `curl -sk` |
-| Argo UI shows broken pipe | Client closed a port-forward connection | Usually harmless if the forward remains alive |
+| VynCICD test says Network error | Private service, load-balancer mapping, or TLS failure | Check service endpoints, the loopback-only Docker binding, and `curl -sk https://127.0.0.1:8081/api/version` |
+| Browser cannot open Argo CD directly | Endpoint is intentionally loopback-only | Use an SSH tunnel for browser access; do not expose the port publicly |
 | `gitea` DNS not found | Docker name is not Kubernetes DNS | Use Gitea’s IP on `k3d-cicd` or create a stable Service/Endpoints bridge |
 | App path does not exist | Wrong Git path/revision | Ensure `apps/jenkins-cd-test` exists on `main` |
 | Application OutOfSync | Git desired state differs from cluster | Click Sync and inspect the diff |
 | Application Degraded | Workload is unhealthy | Inspect Application events and `kubectl describe pod` |
 | Run remains pending | Old trigger route or stale run | Inspect `data/runs.json`; trigger a new run after deployment |
-| Run remains running | Polling not reached or Argo API unavailable | Refresh Runs; check `argoCdSyncStatus`, `argoCdHealthStatus`, and port-forward |
+| Run remains running | Polling not reached or Argo API unavailable | Refresh Runs; check `argoCdSyncStatus`, `argoCdHealthStatus`, and the private endpoint |
 | Argo HTTP 401/403 | Invalid token or insufficient Argo permission | Generate a fresh token; verify Argo project/application permissions |
 | Quota exceeded | `argocd` or test namespace cap reached | `kubectl describe resourcequota` before increasing any limit |
 
