@@ -16,6 +16,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const pipeline = pipelines[idx]
   if (!pipeline.enabled) return NextResponse.json({ error: 'Pipeline is disabled' }, { status: 409 })
+  if (pipeline.executionMode === 'argocd' && !pipeline.argoCdApplication?.trim()) {
+    return NextResponse.json({ error: 'Configure an Argo CD application before triggering this pipeline.' }, { status: 400 })
+  }
   const repos = loadRepos()
   const repo = repos.find(r => r.id === pipeline.repoId)
   const settings = getSettings()

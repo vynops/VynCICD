@@ -18,8 +18,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   if (auth instanceof NextResponse) return auth
   const { id } = await params
   const run = loadRuns().find(item => item.id === id)
-  if (!run || run.executionMode !== 'argocd' || !run.argoCdApplication) {
+  if (!run || run.executionMode !== 'argocd') {
     return NextResponse.json({ error: 'Argo CD run not found' }, { status: 404 })
+  }
+  if (!run.argoCdApplication?.trim()) {
+    return NextResponse.json({ error: 'This run has no saved Argo CD application reference and cannot be refreshed. Review the pipeline configuration before starting another run.' }, { status: 409 })
   }
 
   try {

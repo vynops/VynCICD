@@ -1184,6 +1184,12 @@ argocd-nginx-test   1/1   Running
 
 ### Argo CD troubleshooting
 
+Historical runs without a saved Argo CD application reference cannot be polled.
+The Runs page identifies these records and links to their run details and pipeline
+configuration without changing their recorded statuses. They do not prevent
+other external runs from refreshing. New manual Argo CD triggers require an
+application reference before a run is created.
+
 | Symptom | Cause | Fix |
 |---|---|---|
 | VynCICD test returns 404 | Wrong version endpoint or missing route | Use `/api/version`; confirm `/api/settings/test-argocd` is in the build |

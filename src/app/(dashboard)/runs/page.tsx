@@ -1,7 +1,7 @@
 'use client'
 
 import useSWR from 'swr'
-import { Fragment, Suspense, useEffect, useState } from 'react'
+import { Fragment, Suspense, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { CheckCircle, XCircle, Clock, RefreshCw, ChevronDown, ChevronRight, Download, Search, Filter } from 'lucide-react'
@@ -90,10 +90,11 @@ function RunDetail({ run }: { run: PipelineRun }) {
       )}
       {run.executionMode === 'argocd' && (
         <div className="mb-4 p-3 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-xs text-cyan-300">
-          Argo CD application: <span className="font-mono">{run.argoCdApplication}</span>
+          Argo CD application: <span className="font-mono">{run.argoCdApplication?.trim() || 'Not recorded'}</span>
           <span className="ml-3">Sync: {run.argoCdSyncStatus ?? 'Pending'}</span>
           <span className="ml-3">Health: {run.argoCdHealthStatus ?? 'Pending'}</span>
           {run.argoCdUrl && <a href={run.argoCdUrl} target="_blank" rel="noreferrer" className="ml-3 underline hover:text-white">Open Argo CD</a>}
+          {!run.argoCdApplication?.trim() && <p className="mt-2 text-amber-400">This run cannot be refreshed without its saved Argo CD application reference. Its recorded status has not been changed.</p>}
         </div>
       )}
       {run.aiTriage && (
@@ -129,25 +130,48 @@ function RunsContent() {
   const [search, setSearch] = useState('')
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [pollError, setPollError] = useState('')
+  const activeRuns = runs.filter(item =>
+    ['jenkinsfile', 'argocd'].includes(item.executionMode ?? '')
+    && !['success', 'failed', 'cancelled'].includes(item.status)
+  )
+  const incompleteRuns = activeRuns.filter(run => run.executionMode === 'argocd' && !run.argoCdApplication?.trim())
+  const refreshableRuns = activeRuns.filter(run => !incompleteRuns.includes(run))
+  const pollTargets = useRef<PipelineRun[]>([])
+  pollTargets.current = refreshableRuns
+  const pollKey = JSON.stringify(refreshableRuns.map(run => [run.id, run.executionMode]))
 
   useEffect(() => {
     setStatusFilter(params.get('status') ?? 'all')
   }, [params])
 
   useEffect(() => {
-    const activeRuns = runs.filter(item =>
-      ['jenkinsfile', 'argocd'].includes(item.executionMode ?? '')
-      && !['success', 'failed', 'cancelled'].includes(item.status)
-    )
-    if (activeRuns.length === 0) return
-    const poll = () => Promise.all(activeRuns.map(run => {
-      const endpoint = run.executionMode === 'argocd' ? 'argocd' : 'jenkins'
-      return fetchJson(`/api/runs/${encodeURIComponent(run.id)}/${endpoint}`)
-    })).then(() => { setPollError(''); return mutate() }).catch(() => setPollError('Unable to refresh external run status. Displayed results may be stale.'))
-    poll()
-    const timer = window.setInterval(poll, 5000)
-    return () => window.clearInterval(timer)
-  }, [runs, mutate])
+    let disposed = false
+    let timer: number | undefined
+    setPollError('')
+    if (pollTargets.current.length === 0) return
+    const poll = async () => {
+      const results = await Promise.allSettled(pollTargets.current.map(run => {
+        const endpoint = run.executionMode === 'argocd' ? 'argocd' : 'jenkins'
+        return fetchJson(`/api/runs/${encodeURIComponent(run.id)}/${endpoint}`)
+      }))
+      if (disposed) return
+      const failures = results.filter(result => result.status === 'rejected').length
+      setPollError(failures ? `Unable to refresh ${failures} external run(s). Displayed results for those runs may be stale.` : '')
+      if (results.some(result => result.status === 'fulfilled')) {
+        try {
+          await mutate()
+        } catch {
+          if (!disposed) setPollError('External status was refreshed, but the run list could not be reloaded.')
+        }
+      }
+      if (!disposed) timer = window.setTimeout(poll, 5000)
+    }
+    void poll()
+    return () => {
+      disposed = true
+      window.clearTimeout(timer)
+    }
+  }, [pollKey, mutate])
 
   const filtered = runs.filter(r => {
     const matchStatus = statusFilter === 'all' || (statusFilter === 'completed' ? r.status === 'success' || r.status === 'failed' : r.status === statusFilter)
@@ -160,6 +184,15 @@ function RunsContent() {
     <div className="space-y-4 max-w-screen-2xl">
       {error && <p role="alert" className="text-sm text-red-400">Unable to load runs. Refresh to retry; displayed results may be stale.</p>}
       {pollError && <p role="alert" className="text-sm text-red-400">{pollError}</p>}
+      {incompleteRuns.length > 0 && <div role="alert" className="rounded-lg border border-amber-800/50 bg-amber-950/20 p-3 text-xs text-amber-300">
+        <p>These Argo CD runs have no saved application reference and cannot be refreshed. Their recorded statuses are unchanged.</p>
+        <ul className="mt-2 space-y-1">
+          {incompleteRuns.map(run => <li key={run.id}>
+            <Link href={`/runs?runId=${encodeURIComponent(run.id)}`} className="underline">{run.pipelineName} · {run.id.slice(0, 8)}</Link>
+            {' — '}<Link href={`/pipelines?pipelineId=${encodeURIComponent(run.pipelineId)}`} className="underline">Review pipeline configuration</Link> before starting another run.
+          </li>)}
+        </ul>
+      </div>}
       {(pipelineId || from || date) && <p className="text-xs text-slate-400">
         Filtered to {pipelineId ? `pipeline ${pipelineId}` : 'all pipelines'}{from ? ` since ${from}` : ''}{date ? ` on ${date} (UTC)` : ''}.
         {' '}<Link href="/runs" className="text-emerald-400 underline">Clear source filters</Link>
