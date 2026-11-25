@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireRole } from '@/lib/auth'
 import { getSettings } from '@/lib/settings-store'
+import { normalizeAnthropicModel } from '@/lib/anthropic-model'
 
 interface TestResponse {
   success: boolean
@@ -58,13 +59,36 @@ export async function POST(req: NextRequest) {
     }
 
     if (provider === 'anthropic') {
-      const ok = await testAnthropic(apiKey)
-      return NextResponse.json<TestResponse>({ success: ok, message: ok ? `Connected to Anthropic (${model}).` : 'Anthropic API test failed.' })
+      const anthropicModel = normalizeAnthropicModel(requestedModel)
+      if (!anthropicModel || anthropicModel === '.' || anthropicModel === '..') {
+        return NextResponse.json<TestResponse>({ success: false, message: 'Enter an Anthropic model ID, such as claude-sonnet-5-5.' }, { status: 400 })
+      }
+
+      const res = await testAnthropic(apiKey, anthropicModel)
+      const message = res.ok
+        ? `Anthropic model ${anthropicModel} is available.`
+        : res.status === 404
+          ? `Anthropic model ${anthropicModel} was not found or is unavailable to this API key. Enter the exact model ID (e.g. claude-sonnet-5-5).`
+          : `Anthropic model lookup failed (HTTP ${res.status}).`
+      return NextResponse.json<TestResponse>({ success: res.ok, message })
     }
 
     if (provider === 'google') {
-      const ok = await testGoogle(apiKey, model)
-      return NextResponse.json<TestResponse>({ success: ok, message: ok ? `Connected to Google Gemini (${model}).` : 'Google Gemini API test failed.' })
+      const res = await testGoogle(apiKey, model)
+      const failures: Record<number, string> = {
+        400: 'Invalid request or API key. Verify the Gemini key and model ID.',
+        401: 'Authentication failed. Verify the Gemini API key.',
+        403: 'Access denied. Check API key restrictions and Gemini API access.',
+        404: `Model ${model} was not found or is unavailable to this API key. Check the exact model ID.`,
+        429: 'Quota or rate limit exceeded. Check your Gemini quota and billing, then retry.',
+        500: 'Google encountered an internal service error. Retry later.',
+        503: 'Google Gemini is unavailable or overloaded. Retry later.',
+        504: 'Google Gemini exceeded its response deadline. Retry later.',
+      }
+      const message = res.ok
+        ? `Connected to Google Gemini (${model}).`
+        : `Google Gemini test failed (HTTP ${res.status}). ${failures[res.status] ?? 'Check Gemini API availability and your provider configuration.'}`
+      return NextResponse.json<TestResponse>({ success: res.ok, message })
     }
 
     return NextResponse.json<TestResponse>({ success: false, message: `Unsupported provider: ${provider}` }, { status: 400 })
@@ -82,26 +106,31 @@ async function testBearer(url: string, apiKey: string): Promise<boolean> {
   return res.ok
 }
 
-async function testAnthropic(apiKey: string): Promise<boolean> {
-  const res = await fetch('https://api.anthropic.com/v1/models', {
+async function testAnthropic(apiKey: string, model: string): Promise<Response> {
+  return fetch(`https://api.anthropic.com/v1/models/${encodeURIComponent(model)}`, {
     headers: {
       'x-api-key': apiKey,
       'anthropic-version': '2023-06-01',
     },
     signal: AbortSignal.timeout(8000),
   })
-  return res.ok
 }
 
-async function testGoogle(apiKey: string, model: string): Promise<boolean> {
+async function testGoogle(apiKey: string, model: string): Promise<Response> {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ contents: [{ parts: [{ text: 'ping' }] }] }),
-    signal: AbortSignal.timeout(8000),
-  })
-  return res.ok
+  try {
+    return await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contents: [{ parts: [{ text: 'ping' }] }] }),
+      signal: AbortSignal.timeout(8000),
+    })
+  } catch (e) {
+    if (e instanceof Error && e.name === 'TimeoutError') {
+      throw new Error('Google Gemini request timed out after 8 seconds. Retry later.')
+    }
+    throw e
+  }
 }
 
 async function testCustom(apiKey: string, baseUrl: string): Promise<boolean> {

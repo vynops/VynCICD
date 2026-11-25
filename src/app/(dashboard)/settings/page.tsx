@@ -135,12 +135,12 @@ function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: 
 const TooltipStyle = { backgroundColor: '#0d1117', border: '1px solid #1e293b', borderRadius: 8, fontSize: 11 }
 
 function SettingsContent() {
-  const params = useSearchParams()
+  const requestedTab = useSearchParams().get('tab')
   const { data: rawSettings, error: settingsError, mutate } = useSWR<AppSettings>('/api/settings', fetchJson)
   const { data: usageData, error: usageError, isLoading: usageLoading } = useSWR<CopilotUsageSummary>('/api/copilot/usage', fetchJson, { refreshInterval: 30000 })
   const { data: account } = useSWR<{ role: string }>('/api/auth/me', fetchJson)
   const isAdmin = account?.role === 'admin'
-  const [tab, setTab] = useState('k8s')
+  const [tab, setTab] = useState(() => TABS.find(item => item.id === requestedTab)?.id ?? 'k8s')
   const [form, setForm] = useState<Partial<AppSettings>>({})
   const [saved, setSaved]   = useState(false)
   const [saving, setSaving] = useState(false)
@@ -150,9 +150,8 @@ function SettingsContent() {
   const formRevision = useRef(0)
 
   useEffect(() => {
-    const requested = params.get('tab')
-    if (requested && TABS.some(item => item.id === requested)) setTab(requested)
-  }, [params])
+    if (requestedTab && TABS.some(item => item.id === requestedTab)) setTab(requestedTab)
+  }, [requestedTab])
 
   useEffect(() => {
     if (!rawSettings || dirty) return
@@ -442,7 +441,10 @@ function SettingsContent() {
         {tab === 'ai' && (
           <>
             <h3 className="text-sm font-semibold text-white">AI Copilot</h3>
-            <Link href="/copilot" className="text-xs text-emerald-400 hover:underline">Open AI Copilot</Link>
+            <div className="flex flex-wrap gap-4 text-xs text-emerald-400">
+              <Link href="/copilot" className="hover:underline">Open AI Copilot</Link>
+              <button type="button" onClick={() => setTab('usage')} className="hover:underline">View token usage by model</button>
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Field label="AI Provider" source="settings.json">
                 <select
@@ -545,6 +547,40 @@ function SettingsContent() {
                 </ResponsiveContainer>
               </div>
             )}
+            <div className="mt-5">
+              <h4 className="mb-2 text-sm font-semibold text-slate-200">Usage by date and model</h4>
+              <p className="mb-3 text-xs text-slate-400">Last 7 days (UTC). Older usage may not have a model recorded.</p>
+              {usageData.last7DaysByModel?.length ? (
+                <div className="overflow-x-auto">
+                  <table aria-label="Copilot usage by date and model" className="w-full text-left text-xs text-slate-300">
+                    <thead className="border-b border-slate-700 text-slate-400">
+                      <tr>
+                        <th scope="col" className="p-2">Date</th>
+                        <th scope="col" className="p-2">Provider</th>
+                        <th scope="col" className="p-2">Model</th>
+                        <th scope="col" className="p-2 text-right">Requests</th>
+                        <th scope="col" className="p-2 text-right">Prompt tokens</th>
+                        <th scope="col" className="p-2 text-right">Completion tokens</th>
+                        <th scope="col" className="p-2 text-right">Total tokens</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {usageData.last7DaysByModel.map(row => (
+                        <tr key={JSON.stringify([row.date, row.provider, row.model])} className="border-b border-slate-800">
+                          <td className="whitespace-nowrap p-2">{row.date}</td>
+                          <td className="p-2">{row.provider ?? '—'}</td>
+                          <td className="p-2">{row.model ?? 'Model not recorded'}</td>
+                          <td className="p-2 text-right tabular-nums">{row.requests.toLocaleString()}</td>
+                          <td className="p-2 text-right tabular-nums">{row.promptTokens.toLocaleString()}</td>
+                          <td className="p-2 text-right tabular-nums">{row.completionTokens.toLocaleString()}</td>
+                          <td className="p-2 text-right tabular-nums">{row.totalTokens.toLocaleString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : <p className="text-xs text-slate-500">No recent Copilot usage recorded.</p>}
+            </div>
           </>
         )}
       </fieldset>

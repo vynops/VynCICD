@@ -4,6 +4,7 @@ import { getSettings } from '@/lib/settings-store'
 import { recordUsage } from '@/lib/copilot-usage'
 import { loadRuns, loadScans } from '@/lib/data-store'
 import { loadIncidents } from '@/lib/oncall-store'
+import { normalizeAnthropicModel } from '@/lib/anthropic-model'
 
 type ChatMsg = { role: 'user' | 'assistant'; content: string }
 type CopilotSource = { label: string; href: string }
@@ -121,7 +122,9 @@ export async function POST(req: NextRequest) {
   const apiKey = provider === 'groq'
     ? (settings.aiApiKey || settings.groqApiKey || process.env.GROQ_API_KEY)
     : settings.aiApiKey
-  const configuredModel = settings.aiModel?.trim()
+  const configuredModel = provider === 'anthropic'
+    ? normalizeAnthropicModel(settings.aiModel)
+    : settings.aiModel?.trim()
   const model = provider === 'groq' && (!configuredModel || RETIRED_GROQ_MODELS.has(configuredModel))
     ? GROQ_DEFAULT_MODEL
     : configuredModel || 'gpt-4o-mini'
@@ -143,7 +146,7 @@ export async function POST(req: NextRequest) {
       messages: safeMessages,
     })
 
-    if (result.usage) recordUsage(result.usage.promptTokens, result.usage.completionTokens)
+    if (result.usage) recordUsage(provider, model, result.usage.promptTokens, result.usage.completionTokens)
 
     return NextResponse.json({ answer: result.answer || 'No response generated.', sources: evidence.sources })
   } catch (e) {
@@ -191,6 +194,7 @@ async function callOpenAiCompatible(
       ],
       temperature: 0.3,
       max_tokens: 1024,
+      stream: false,
     }),
   })
 
@@ -199,7 +203,10 @@ async function callOpenAiCompatible(
     throw new Error(`HTTP ${res.status}${text ? `: ${text}` : ''}`)
   }
 
-  const data = await res.json() as {
+  const raw = await res.text()
+  if (/^\s*data:/.test(raw)) return parseOpenAiSse(raw)
+
+  const data = JSON.parse(raw) as {
     choices?: Array<{ message?: { content?: string } }>
     usage?: { prompt_tokens?: number; completion_tokens?: number }
   }
@@ -211,6 +218,28 @@ async function callOpenAiCompatible(
       completionTokens: data.usage?.completion_tokens ?? 0,
     },
   }
+}
+
+// Some OpenAI-compatible gateways always stream Server-Sent Events, even when stream=false.
+function parseOpenAiSse(raw: string): { answer: string; usage?: { promptTokens: number; completionTokens: number } } {
+  let answer = ''
+  let usage: { promptTokens: number; completionTokens: number } | undefined
+  for (const line of raw.split(/\r?\n/)) {
+    const payload = line.match(/^data:\s?(.*)$/)?.[1]?.trim()
+    if (!payload || payload === '[DONE]') continue
+    let chunk: {
+      choices?: Array<{ delta?: { content?: string | null }; message?: { content?: string | null } }>
+      usage?: { prompt_tokens?: number; completion_tokens?: number } | null
+    }
+    try { chunk = JSON.parse(payload) } catch { continue }
+    const choice = chunk.choices?.[0]
+    answer += choice?.delta?.content ?? choice?.message?.content ?? ''
+    if (chunk.usage) usage = {
+      promptTokens: chunk.usage.prompt_tokens ?? 0,
+      completionTokens: chunk.usage.completion_tokens ?? 0,
+    }
+  }
+  return { answer, usage: usage ?? { promptTokens: 0, completionTokens: 0 } }
 }
 
 async function callCustomOpenAi(opts: {
@@ -246,7 +275,6 @@ async function callAnthropic(opts: {
     body: JSON.stringify({
       model: opts.model,
       max_tokens: 1024,
-      temperature: 0.3,
       system: opts.systemPrompt,
       messages: opts.messages.map(m => ({ role: m.role, content: m.content })),
     }),
